@@ -1,0 +1,25 @@
+[Unit]
+Description=GitDock - Multi-Account GitHub/GitLab Manager (User Service)
+Documentation=https://gitdock.dev
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /opt/gitdock/server.js
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+WorkingDirectory=/opt/gitdock
+
+# Environment — user service inherits the user's home, SSH, etc.
+Environment=NODE_ENV=production
+Environment=GITDOCK_PORT=3847
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

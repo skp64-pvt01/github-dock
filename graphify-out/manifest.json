@@ -1,0 +1,302 @@
+{
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/hub/auth.js": {
+    "mtime": 1784228451.5313895,
+    "ast_hash": "3cd4ac111763e547443d26e428d2badc",
+    "semantic_hash": "3cd4ac111763e547443d26e428d2badc"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/hub/db.js": {
+    "mtime": 1784228451.5313895,
+    "ast_hash": "ebbd98c154d1654e717af9112932d2a9",
+    "semantic_hash": "ebbd98c154d1654e717af9112932d2a9"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/hub/package.json": {
+    "mtime": 1784228451.5313895,
+    "ast_hash": "2cee53b8c963babc7f79bbc89eccb1c2",
+    "semantic_hash": "2cee53b8c963babc7f79bbc89eccb1c2"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/hub/server.js": {
+    "mtime": 1784228451.5313895,
+    "ast_hash": "0a104c6c885b546b5aa2abc076963141",
+    "semantic_hash": "0a104c6c885b546b5aa2abc076963141"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/lib/dormant.js": {
+    "mtime": 1784228451.5313895,
+    "ast_hash": "55eddbc5c687484ec421ad54432806ea",
+    "semantic_hash": "55eddbc5c687484ec421ad54432806ea"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/lib/git-parse.js": {
+    "mtime": 1784228451.5330167,
+    "ast_hash": "7d3b2c04c4af4cb47f4c3b3b009cf2b0",
+    "semantic_hash": "7d3b2c04c4af4cb47f4c3b3b009cf2b0"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/lib/security.js": {
+    "mtime": 1784228451.5330167,
+    "ast_hash": "9fea49b8f611d9b826b81bbcc4d72458",
+    "semantic_hash": "9fea49b8f611d9b826b81bbcc4d72458"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/package.json": {
+    "mtime": 1784228451.5330167,
+    "ast_hash": "e6bf33cafc8791e0384c5a455ee81e4b",
+    "semantic_hash": "e6bf33cafc8791e0384c5a455ee81e4b"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/scripts/build-sea.ps1": {
+    "mtime": 1784228451.5330167,
+    "ast_hash": "aa2d4ab4c26aec0e81e86b6ff023a6e3",
+    "semantic_hash": "aa2d4ab4c26aec0e81e86b6ff023a6e3"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/scripts/build-sea.sh": {
+    "mtime": 1784228451.5331025,
+    "ast_hash": "bd008f3066541635db3c4f2e5d0501c2",
+    "semantic_hash": "bd008f3066541635db3c4f2e5d0501c2"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/scripts/publish-v1.2.0.ps1": {
+    "mtime": 1784228451.5331025,
+    "ast_hash": "a4bc51158c19d142eefc5c63b13cff08",
+    "semantic_hash": "a4bc51158c19d142eefc5c63b13cff08"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/sea-config.json": {
+    "mtime": 1784228451.5331025,
+    "ast_hash": "97fb9dbcf9f02bdbce79226dc1935957",
+    "semantic_hash": "97fb9dbcf9f02bdbce79226dc1935957"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/server.js": {
+    "mtime": 1784228451.5331025,
+    "ast_hash": "114cdc264fabfc2a259de0bfb641541f",
+    "semantic_hash": "114cdc264fabfc2a259de0bfb641541f"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/js/common.js": {
+    "mtime": 1784228451.5363576,
+    "ast_hash": "5be5a92518d25cffc8c1b869732bb43a",
+    "semantic_hash": "5be5a92518d25cffc8c1b869732bb43a"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/js/index-hero.js": {
+    "mtime": 1784228451.537896,
+    "ast_hash": "2f893ef9298a073d98551afbf68e9db4",
+    "semantic_hash": "2f893ef9298a073d98551afbf68e9db4"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/manifest.json": {
+    "mtime": 1784228451.537896,
+    "ast_hash": "11bfc83efe33e0b3435584c29bb2666a",
+    "semantic_hash": "11bfc83efe33e0b3435584c29bb2666a"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/start.ps1": {
+    "mtime": 1784228451.542358,
+    "ast_hash": "32120c7e6cd4c6d2edc1f24e1e735a39",
+    "semantic_hash": "32120c7e6cd4c6d2edc1f24e1e735a39"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/start.sh": {
+    "mtime": 1784228451.542358,
+    "ast_hash": "2564e930d23e83b02d702f6e1357c157",
+    "semantic_hash": "2564e930d23e83b02d702f6e1357c157"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/test/api.integration.test.js": {
+    "mtime": 1784228451.542358,
+    "ast_hash": "438c884d8b965463c7594d10e5c9eb6f",
+    "semantic_hash": "438c884d8b965463c7594d10e5c9eb6f"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/test/dormant.test.js": {
+    "mtime": 1784228451.5442774,
+    "ast_hash": "4711750479031be8e2dda8da815c7922",
+    "semantic_hash": "4711750479031be8e2dda8da815c7922"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/test/git-parse.test.js": {
+    "mtime": 1784228451.5442774,
+    "ast_hash": "7ff5bb5b4f13cdfbc574ad8ffd2a8dfc",
+    "semantic_hash": "7ff5bb5b4f13cdfbc574ad8ffd2a8dfc"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/test/helpers/http.js": {
+    "mtime": 1784228451.5442774,
+    "ast_hash": "3ab38a4583ba607929b77d253ae8d5bc",
+    "semantic_hash": "3ab38a4583ba607929b77d253ae8d5bc"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/test/security.test.js": {
+    "mtime": 1784228451.5442774,
+    "ast_hash": "17fbb2fdb10479704d33b1d4566a2afe",
+    "semantic_hash": "17fbb2fdb10479704d33b1d4566a2afe"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/workspace.js": {
+    "mtime": 1784228451.5442774,
+    "ast_hash": "d3203f56d4b8dd7fa22952e682aac4f6",
+    "semantic_hash": "d3203f56d4b8dd7fa22952e682aac4f6"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/.github/pull_request_template.md": {
+    "mtime": 1784228451.527357,
+    "ast_hash": "591088fcf23a360382ec3286590bb892",
+    "semantic_hash": "591088fcf23a360382ec3286590bb892"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/.github/workflows/build-release.yml": {
+    "mtime": 1784228451.5290327,
+    "ast_hash": "8aa63c069ef6297ffaff8c97e291f6a4",
+    "semantic_hash": "8aa63c069ef6297ffaff8c97e291f6a4"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/.github/workflows/test.yml": {
+    "mtime": 1784228451.5290692,
+    "ast_hash": "9b51d32abb7dbacfc83b053d074e1b08",
+    "semantic_hash": "9b51d32abb7dbacfc83b053d074e1b08"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/AGENTS.md": {
+    "mtime": 1784228733.5450275,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/CHANGELOG.md": {
+    "mtime": 1784228451.5290692,
+    "ast_hash": "59cda1ba1d88bd192e4eef603913833a",
+    "semantic_hash": "59cda1ba1d88bd192e4eef603913833a"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/CONTRIBUTING.md": {
+    "mtime": 1784228451.5290692,
+    "ast_hash": "99daafeeb2d462b41d0aa391a9226c28",
+    "semantic_hash": "99daafeeb2d462b41d0aa391a9226c28"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/README.md": {
+    "mtime": 1784228451.5290692,
+    "ast_hash": "230dc86c65f2aa2681c774f7b70433d3",
+    "semantic_hash": "230dc86c65f2aa2681c774f7b70433d3"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/dashboard.html": {
+    "mtime": 1784228451.5290692,
+    "ast_hash": "cd1459fe3c0ef27e00a6b09e96bc8e0e",
+    "semantic_hash": "cd1459fe3c0ef27e00a6b09e96bc8e0e"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/hub/README.md": {
+    "mtime": 1784228451.5313895,
+    "ast_hash": "a1ef37ddce23dfd74b44ed3d01c6375c",
+    "semantic_hash": "a1ef37ddce23dfd74b44ed3d01c6375c"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/hub/dashboard.html": {
+    "mtime": 1784228451.5313895,
+    "ast_hash": "53d9bb9e5938bec1231ded4e8d56181b",
+    "semantic_hash": "53d9bb9e5938bec1231ded4e8d56181b"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/scripts/pr-site-download-body.md": {
+    "mtime": 1784228451.5331025,
+    "ast_hash": "ceeed4421cf2ebdaf13697f43175c7dc",
+    "semantic_hash": "ceeed4421cf2ebdaf13697f43175c7dc"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/scripts/pr-site-mobile-preview-body.md": {
+    "mtime": 1784228451.5331025,
+    "ast_hash": "07c595405e6305b9895ffe1940819515",
+    "semantic_hash": "07c595405e6305b9895ffe1940819515"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/scripts/pr-test-suite-body.md": {
+    "mtime": 1784228451.5331025,
+    "ast_hash": "1ca93d828526c020a10f8e8f3075b318",
+    "semantic_hash": "1ca93d828526c020a10f8e8f3075b318"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/scripts/release-v1.2.0-notes.md": {
+    "mtime": 1784228451.5331025,
+    "ast_hash": "052e9b96010b946b078551003285805c",
+    "semantic_hash": "052e9b96010b946b078551003285805c"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/scripts/release-v1.2.0-pr-body.md": {
+    "mtime": 1784228451.5331025,
+    "ast_hash": "34fbf46fd49b21463915e033a612195e",
+    "semantic_hash": "34fbf46fd49b21463915e033a612195e"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/download.html": {
+    "mtime": 1784228451.5353575,
+    "ast_hash": "57a3d691af39f9a702a91a515a23fa4f",
+    "semantic_hash": "57a3d691af39f9a702a91a515a23fa4f"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/index.html": {
+    "mtime": 1784228451.5363576,
+    "ast_hash": "3512f89ed8c624cb36a9f023d666d54c",
+    "semantic_hash": "3512f89ed8c624cb36a9f023d666d54c"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/privacy.html": {
+    "mtime": 1784228451.537896,
+    "ast_hash": "4fbd6087e867e9e1233c8ed6b7c8aeb4",
+    "semantic_hash": "4fbd6087e867e9e1233c8ed6b7c8aeb4"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/robots.txt": {
+    "mtime": 1784228451.537896,
+    "ast_hash": "c5fae2a62bab2426f6a211ce49fe5332",
+    "semantic_hash": "c5fae2a62bab2426f6a211ce49fe5332"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/terms.html": {
+    "mtime": 1784228451.542358,
+    "ast_hash": "4d043c4934a98503bd9afd89d6252377",
+    "semantic_hash": "4d043c4934a98503bd9afd89d6252377"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/workspace-setup.html": {
+    "mtime": 1784228451.5442774,
+    "ast_hash": "656af5940363155ad6f1398a533b12af",
+    "semantic_hash": "656af5940363155ad6f1398a533b12af"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/gitdock-logo-nobg.png": {
+    "mtime": 1784228451.5293572,
+    "ast_hash": "4d2c640aa21633391989c4a2c77b0632",
+    "semantic_hash": "4d2c640aa21633391989c4a2c77b0632"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/gitdock-logo.png": {
+    "mtime": 1784228451.5303574,
+    "ast_hash": "5d58578e9f2382522438dc675aa5c60a",
+    "semantic_hash": "5d58578e9f2382522438dc675aa5c60a"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/hub/gitdock-logo-removebg.png": {
+    "mtime": 1784228451.5313895,
+    "ast_hash": "4d2c640aa21633391989c4a2c77b0632",
+    "semantic_hash": "4d2c640aa21633391989c4a2c77b0632"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/hub/gitdock-logo.png": {
+    "mtime": 1784228451.5313895,
+    "ast_hash": "5d58578e9f2382522438dc675aa5c60a",
+    "semantic_hash": "5d58578e9f2382522438dc675aa5c60a"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/dashboard.png": {
+    "mtime": 1784228451.5343575,
+    "ast_hash": "e88e8fc3227d177b8c517ccce89647da",
+    "semantic_hash": "e88e8fc3227d177b8c517ccce89647da"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/dashboard_v2.jpg": {
+    "mtime": 1784228451.5353575,
+    "ast_hash": "ace5a19c1a2336d395209075a64cf013",
+    "semantic_hash": "ace5a19c1a2336d395209075a64cf013"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/gitdock-logo-removebg-preview.png": {
+    "mtime": 1784228451.5353575,
+    "ast_hash": "4d2c640aa21633391989c4a2c77b0632",
+    "semantic_hash": "4d2c640aa21633391989c4a2c77b0632"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/gitdock-logo.png": {
+    "mtime": 1784228451.5363576,
+    "ast_hash": "5d58578e9f2382522438dc675aa5c60a",
+    "semantic_hash": "5d58578e9f2382522438dc675aa5c60a"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/og-card-white.png": {
+    "mtime": 1784228451.537896,
+    "ast_hash": "7be36aefdc9ffb7bc111f95d079f6bc0",
+    "semantic_hash": "7be36aefdc9ffb7bc111f95d079f6bc0"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/tentacle-bottom.png": {
+    "mtime": 1784228451.537896,
+    "ast_hash": "6ab1c89a91f920033fedfd15ddfc28f5",
+    "semantic_hash": "6ab1c89a91f920033fedfd15ddfc28f5"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/tentacle-bottomleft.png": {
+    "mtime": 1784228451.5403578,
+    "ast_hash": "b706e893c9b4d9c1f20de56258ffba59",
+    "semantic_hash": "b706e893c9b4d9c1f20de56258ffba59"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/tentacle-left.png": {
+    "mtime": 1784228451.541358,
+    "ast_hash": "fce14d09f7994d4b7944ee3a6752df4a",
+    "semantic_hash": "fce14d09f7994d4b7944ee3a6752df4a"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/tentacle-left2.png": {
+    "mtime": 1784228451.541358,
+    "ast_hash": "0e534e8d3579eff0255b5100e6bcaaec",
+    "semantic_hash": "0e534e8d3579eff0255b5100e6bcaaec"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/tentacle-right.png": {
+    "mtime": 1784228451.542358,
+    "ast_hash": "12d1443806657f0602fdee9b86969aba",
+    "semantic_hash": "12d1443806657f0602fdee9b86969aba"
+  },
+  "/home/sysadmin/Projects/00-github/GitDock/skp64-pvt01/github-dock/site/tentacle-top.png": {
+    "mtime": 1784228451.542358,
+    "ast_hash": "602427567c99c1da409d6456b32b011f",
+    "semantic_hash": "602427567c99c1da409d6456b32b011f"
+  }
+}

@@ -1,0 +1,22 @@
+# GitDock source files → /opt/gitdock/
+.gitattributes opt/gitdock/
+.gitignore     opt/gitdock/
+AGENTS.md      opt/gitdock/
+CHANGELOG.md   opt/gitdock/
+CONTRIBUTING.md opt/gitdock/
+PLAN.md        opt/gitdock/
+README.md      opt/gitdock/
+package.json   opt/gitdock/
+server.js      opt/gitdock/
+workspace.js   opt/gitdock/
+dashboard.html opt/gitdock/
+workspace-setup.html opt/gitdock/
+start.sh       opt/gitdock/
+sea-config.json opt/gitdock/
+
+# Directories (dh_install handles these recursively)
+lib/           opt/gitdock/
+hub/           opt/gitdock/
+site/          opt/gitdock/
+test/          opt/gitdock/
+scripts/       opt/gitdock/

@@ -61,10 +61,12 @@ describe("parseGitHubRepoUrl", () => {
     assert.deepEqual(security.parseGitHubRepoUrl("https://github.com/octo/Hello-World"), {
       owner: "octo",
       repo: "Hello-World",
+      provider: "github",
     });
     assert.deepEqual(security.parseGitHubRepoUrl("git@github.com-work:octo/Hello-World.git"), {
       owner: "octo",
       repo: "Hello-World",
+      provider: "github",
     });
   });
 
@@ -76,6 +78,7 @@ describe("parseGitHubRepoUrl", () => {
     assert.deepEqual(security.parseGitHubRepoUrl("github.com/octo/Hello-World.git"), {
       owner: "octo",
       repo: "Hello-World",
+      provider: "github",
     });
   });
 });
@@ -85,13 +88,14 @@ describe("parseGitHubOwnerRepoFromRemote", () => {
     assert.deepEqual(security.parseGitHubOwnerRepoFromRemote("git@gitlab.com:octo/Hello-World.git"), {
       owner: "octo",
       repo: "Hello-World",
+      provider: "github",
     });
   });
 
   it("prefers GitHub URL rules when host is github.com", () => {
     assert.deepEqual(
       security.parseGitHubOwnerRepoFromRemote("https://github.com/octo/Hello-World"),
-      { owner: "octo", repo: "Hello-World" }
+      { owner: "octo", repo: "Hello-World", provider: "github" }
     );
   });
 
@@ -142,5 +146,55 @@ describe("configJsonHasNoTokenFields", () => {
       security.configJsonHasNoTokenFields({ accounts: { work: { token: "ghp_x" } } }),
       false
     );
+  });
+});
+
+describe("sanitizeGitLabRepoName", () => {
+  it("allows group/subgroup/repo format", () => {
+    assert.equal(security.sanitizeGitLabRepoName("engineering/backend/api-service"), "engineering/backend/api-service");
+  });
+
+  it("allows simple repo names", () => {
+    assert.equal(security.sanitizeGitLabRepoName("my-project"), "my-project");
+  });
+
+  it("allows single group prefix", () => {
+    assert.equal(security.sanitizeGitLabRepoName("group/repo"), "group/repo");
+  });
+
+  it("rejects path traversal", () => {
+    assert.equal(security.sanitizeGitLabRepoName("../etc/passwd"), null);
+    assert.equal(security.sanitizeGitLabRepoName("../../malicious"), null);
+  });
+
+  it("rejects shell injection", () => {
+    assert.equal(security.sanitizeGitLabRepoName("repo;rm -rf /"), null);
+    assert.equal(security.sanitizeGitLabRepoName("repo$(whoami)"), null);
+  });
+
+  it("rejects names that resolve outside BASE_DIR", () => {
+    assert.equal(security.sanitizeGitLabRepoName(".."), null);
+    assert.equal(security.sanitizeGitLabRepoName("a/../../b"), null);
+  });
+
+  it("rejects empty or whitespace-only", () => {
+    assert.equal(security.sanitizeGitLabRepoName(""), null);
+    assert.equal(security.sanitizeGitLabRepoName("   "), null);
+  });
+});
+
+describe("gitlabOfficialKeysInKnownHosts", () => {
+  it("detects GitLab keys in content", () => {
+    const content = security.GITLAB_OFFICIAL_KNOWN_HOSTS_LINES.join("\n");
+    assert.equal(security.gitlabOfficialKeysInKnownHosts(content), true);
+  });
+
+  it("returns false for missing keys", () => {
+    assert.equal(security.gitlabOfficialKeysInKnownHosts("gitlab.com ssh-ed25519 AAA"), false);
+  });
+
+  it("has at least one key entry", () => {
+    assert.ok(security.GITLAB_OFFICIAL_KNOWN_HOSTS_LINES.length >= 1);
+    assert.ok(security.GITLAB_OFFICIAL_KNOWN_HOSTS_LINES.every((l) => l.includes("gitlab.com ")));
   });
 });

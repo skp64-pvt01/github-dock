@@ -42,9 +42,14 @@ const APP_DIR = isPkg || isStandalone ? path.dirname(process.execPath) : __dirna
 const workspaceModule = require("./workspace");
 const security = require("./lib/security");
 const gitParse = require("./lib/git-parse");
+const providerRouting = require("./lib/provider-routing");
+const githubApi = require("./lib/github-api");
+const gitlabApi = require("./lib/gitlab-api");
+const scanRepos = require("./lib/scan-repos");
 const {
   sanitizeAccountName,
   sanitizeRepoName,
+  sanitizeGitLabRepoName,
   sanitizeOwnerName,
   sanitizeSshHostAlias,
   sanitizeBranchName,
@@ -54,10 +59,17 @@ const {
   isPathInsideDir,
   parseGitHubRepoUrl,
   parseGitHubOwnerRepoFromRemote,
+  parseGitLabRepoUrl,
+  parseGitLabRepoFromRemote,
+  parseRepoUrl,
   GITHUB_KNOWN_HOSTS_MARKER,
   GITHUB_KNOWN_HOSTS_END,
   GITHUB_OFFICIAL_KNOWN_HOSTS_LINES,
   githubOfficialKeysInKnownHosts,
+  GITLAB_KNOWN_HOSTS_MARKER,
+  GITLAB_KNOWN_HOSTS_END,
+  GITLAB_OFFICIAL_KNOWN_HOSTS_LINES,
+  gitlabOfficialKeysInKnownHosts,
 } = security;
 
 let BASE_DIR = (isPkg || isStandalone) ? (workspaceModule.loadWorkspace() || path.dirname(process.execPath)) : __dirname;
@@ -82,6 +94,8 @@ function reloadBaseDirFromWorkspace() {
 
 const SSH_MARKER = "# --- GitHub Multi-Account (managed by GitDock) ---";
 const SSH_MARKER_END = "# --- End GitHub Multi-Account ---";
+const SSH_MARKER_GITLAB = "# --- GitLab Multi-Account (managed by GitDock) ---";
+const SSH_MARKER_GITLAB_END = "# --- End GitLab Multi-Account ---";
 
 // --- Config module (file-based, no hardcoded accounts) ---
 function ensureMachineId(config) {
@@ -141,10 +155,13 @@ function getAccounts() {
   const config = loadConfig();
   const accounts = {};
   for (const [name, acc] of Object.entries(config.accounts || {})) {
-    accounts[name] = {
+    const account = {
       ...acc,
-      localDir: path.join(BASE_DIR, name),
+      _name: name,
+      provider: acc.provider || "github",
     };
+    account.localDir = providerRouting.getLocalDir({ BASE_DIR, account });
+    accounts[name] = account;
   }
   return accounts;
 }
@@ -159,9 +176,10 @@ function writeGitconfigForAccount(accountName) {
   if (!account) return;
   const gitconfigPath = path.join(BASE_DIR, `.gitconfig-${accountName}`);
   const safeStr = (s) => String(s || "").trim().replace(/[\r\n\[\]]/g, "").slice(0, 256);
-  const name = safeStr(account.githubUser || accountName);
+  const login = account.githubUser || account.gitlabUser || accountName;
+  const safeLogin = safeStr(login);
   const email = safeStr(account.email);
-  const content = `# Git config for ${safeStr(account.label) || accountName} (${account.githubUser})\n# This file is auto-included when working inside the ${accountName}/ directory\n[user]\n    name = ${name}\n    email = ${email}\n`;
+  const content = `# Git config for ${safeStr(account.label) || accountName} (${safeLogin})\n# This file is auto-included when working inside the ${accountName}/ directory\n[user]\n    name = ${safeLogin}\n    email = ${email}\n`;
   fs.writeFileSync(gitconfigPath, content, "utf8");
 }
 
@@ -364,8 +382,15 @@ app.get("/config.json", (req, res) => res.status(404).send("Not found"));
 
 // --- Helpers ---
 
-/** Add GitHub's documented host key lines to ~/.ssh/known_hosts (no ssh-keyscan). */
-function ensureGitHubKnownHosts() {
+/** Add provider host key lines to ~/.ssh/known_hosts (no ssh-keyscan). */
+function ensureProviderKnownHosts(provider) {
+  const isGitLab = provider === "gitlab";
+  const displayName = isGitLab ? "GitLab" : "GitHub";
+  const marker = isGitLab ? GITLAB_KNOWN_HOSTS_MARKER : GITHUB_KNOWN_HOSTS_MARKER;
+  const endMarker = isGitLab ? GITLAB_KNOWN_HOSTS_END : GITHUB_KNOWN_HOSTS_END;
+  const knownLines = isGitLab ? GITLAB_OFFICIAL_KNOWN_HOSTS_LINES : GITHUB_OFFICIAL_KNOWN_HOSTS_LINES;
+  const checkFn = isGitLab ? gitlabOfficialKeysInKnownHosts : githubOfficialKeysInKnownHosts;
+
   const sshDir = ensureSSHDir();
   const knownPath = path.join(sshDir, "known_hosts");
   let existing = "";
@@ -374,21 +399,21 @@ function ensureGitHubKnownHosts() {
   } catch (e) {
     return { ok: false, added: false, message: "Could not read known_hosts: " + e.message };
   }
-  if (githubOfficialKeysInKnownHosts(existing)) {
-    return { ok: true, added: false, message: "GitHub host keys already in known_hosts." };
+  if (checkFn(existing)) {
+    return { ok: true, added: false, message: `${displayName} host keys already in known_hosts.` };
   }
 
   const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const reBlock = new RegExp(
-    `${escapeRe(GITHUB_KNOWN_HOSTS_MARKER)}[\\s\\S]*?${escapeRe(GITHUB_KNOWN_HOSTS_END)}`,
+    `${escapeRe(marker)}[\\s\\S]*?${escapeRe(endMarker)}`,
     "g"
   );
   const cleaned = existing.replace(reBlock, "").trimEnd();
   const block = [
     "",
-    GITHUB_KNOWN_HOSTS_MARKER,
-    ...GITHUB_OFFICIAL_KNOWN_HOSTS_LINES,
-    GITHUB_KNOWN_HOSTS_END,
+    marker,
+    ...knownLines,
+    endMarker,
     "",
   ].join("\n");
   try {
@@ -399,16 +424,24 @@ function ensureGitHubKnownHosts() {
   return {
     ok: true,
     added: true,
-    message: "Added GitHub host keys from official documentation to known_hosts.",
+    message: `Added ${displayName} host keys from official documentation to known_hosts.`,
   };
 }
 
-/** Run ssh -T per https://docs.github.com/en/authentication/connecting-to-github-with-ssh/testing-your-ssh-connection */
-function testAccountSshConnection(host, expectedGithubUser) {
+/** Backward-compat alias */
+function ensureGitHubKnownHosts() {
+  return ensureProviderKnownHosts("github");
+}
+
+/** Test SSH connection for an account (provider-aware). */
+function testAccountSshConnection(host, expectedUser, provider) {
   const safeHost = sanitizeSshHostAlias(host);
   if (!safeHost) {
     return { tested: false, ok: false, reason: "invalid_host", message: "Invalid SSH host alias for this account." };
   }
+  const isGitLab = provider === "gitlab";
+  const providerName = isGitLab ? "GitLab" : "GitHub";
+
   let r;
   try {
     r = spawnSync(
@@ -428,19 +461,21 @@ function testAccountSshConnection(host, expectedGithubUser) {
     };
   }
   const out = String((r.stdout || "") + (r.stderr || "")).trim();
+
+  // GitLab and GitHub both say "successfully authenticated" on success
   if (out.includes("successfully authenticated")) {
     const loginMatch = out.match(/Hi\s+([^!]+)!/i);
     const login = loginMatch ? loginMatch[1].trim() : null;
-    const expected = String(expectedGithubUser || "").trim();
-    if (expected && login && login.toLowerCase() !== expected.toLowerCase()) {
+    const expected = String(expectedUser || "").trim();
+    if (!isGitLab && expected && login && login.toLowerCase() !== expected.toLowerCase()) {
       return {
         tested: true,
         ok: false,
         reason: "login_mismatch",
         message:
           `SSH authenticated as ${login}, but this GitDock account expects ${expected}. Add the correct key to GitHub or use the matching account.`,
-        githubLogin: login,
-        expectedGithubUser: expected,
+        login,
+        expectedUser,
       };
     }
     return {
@@ -448,46 +483,51 @@ function testAccountSshConnection(host, expectedGithubUser) {
       ok: true,
       reason: "ok",
       message: login
-        ? `GitHub accepted your SSH key (Hi ${login}! GitHub does not provide shell access).`
-        : "GitHub accepted your SSH key.",
-      githubLogin: login,
+        ? `${providerName} accepted your SSH key (Hi ${login}!).`
+        : `${providerName} accepted your SSH key.`,
+      login,
     };
   }
+
   let reason = "failed";
-  let message =
-    "GitHub did not accept this SSH key yet. Add the public key from step 2 at GitHub Settings → SSH and GPG keys, then verify again.";
+  let message = `${providerName} did not accept this SSH key yet. Add the public key then verify again.`;
   if (/permission denied/i.test(out)) {
     reason = "permission_denied";
-    message =
-      "Permission denied (publickey). Per GitHub docs, the key must be added to your account. Paste the full public key from step 2 into GitHub, then verify again.";
+    message = `Permission denied (publickey). Paste the full public key from setup into ${providerName}, then verify again.`;
   } else if (/host key verification failed/i.test(out)) {
     reason = "host_key";
-    message =
-      "Host key verification failed. GitDock adds GitHub's published github.com keys to known_hosts. Click Verify SSH again, or see GitHub SSH key fingerprints in the documentation.";
+    message = `Host key verification failed. Ensure ${providerName}'s host keys are in known_hosts, then verify again.`;
   } else if (/could not resolve|connection timed out|timed out/i.test(out)) {
     reason = "network";
-    message = "Could not reach GitHub over SSH. Check your network or firewall.";
+    message = `Could not reach ${providerName} over SSH. Check your network or firewall.`;
   } else if (/no such identity|identity file|can't open|cannot open/i.test(out)) {
     reason = "identity";
-    message = "SSH could not use this account's private key. Regenerate the key in step 2, add it on GitHub, then verify again.";
+    message = `SSH could not use this account's private key. Regenerate the key in setup, add it on ${providerName}, then verify again.`;
   } else if (out) {
     const snippet = out.replace(/\s+/g, " ").slice(0, 240);
     message = "SSH test failed: " + snippet;
   } else if (r.status === 255) {
-    message = "SSH connection failed (exit 255). Confirm the public key is on GitHub and matches step 2.";
+    message = `SSH connection failed (exit 255). Confirm the public key is on ${providerName} and matches the one from setup.`;
   }
   return { tested: true, ok: false, reason, message };
 }
 
-function getRepoPath(accountName, repoName) {
+function getRepoPath(accountName, repoName, groupPath) {
   const account = validateAccount(accountName);
   if (!account) return null;
-  const safeName = sanitizeRepoName(repoName);
-  if (!safeName) return null;
-  const repoPath = path.join(account.localDir, safeName);
-  // SECURITY: Ensure path is within the expected directory (prefix-safe, Windows case-insensitive)
-  if (!isPathInsideDir(account.localDir, repoPath)) return null;
-  return repoPath;
+
+  const newPath = providerRouting.getRepoPath({ account, repoName, groupPath, BASE_DIR });
+  if (!newPath) return null;
+
+  // If the new path exists, use it
+  if (fs.existsSync(newPath)) return newPath;
+
+  // Legacy fallback: check old path (BASE_DIR/<name>/<repo>) for pre-migration repos
+  const legacyPath = providerRouting.getLegacyRepoPath({ accountName, repoName, BASE_DIR });
+  if (legacyPath && fs.existsSync(legacyPath)) return legacyPath;
+
+  // Return new path even if it doesn't exist yet (for fresh clones)
+  return newPath;
 }
 
 function makeUniqueLocalRepoName({ accountName, desiredName, fallbackHint }) {
@@ -564,78 +604,7 @@ function runGit(args, cwd = BASE_DIR, timeoutMs = 60000) {
 // =============================================================================
 // GitHub REST API helpers (official)
 // =============================================================================
-function parseLinkHeader(linkHeader) {
-  if (!linkHeader || typeof linkHeader !== "string") return {};
-  const out = {};
-  const parts = linkHeader.split(",").map((p) => p.trim()).filter(Boolean);
-  for (const part of parts) {
-    const m = part.match(/^<([^>]+)>\s*;\s*rel="([^"]+)"$/i);
-    if (m) out[m[2]] = m[1];
-  }
-  return out;
-}
-
-function githubRequestJson({ method = "GET", url, token, body, timeoutMs = 15000 }) {
-  return new Promise((resolve, reject) => {
-    try {
-      const u = new URL(url);
-      const data = body ? JSON.stringify(body) : null;
-      const headers = {
-        "User-Agent": "GitDock",
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-      };
-      if (token) headers.Authorization = `Bearer ${token}`;
-      if (data) headers["Content-Type"] = "application/json";
-      if (data) headers["Content-Length"] = Buffer.byteLength(data);
-
-      const req = https.request(
-        {
-          method,
-          hostname: u.hostname,
-          path: u.pathname + u.search,
-          headers,
-        },
-        (res) => {
-          let raw = "";
-          res.setEncoding("utf8");
-          res.on("data", (chunk) => { raw += chunk; });
-          res.on("end", () => {
-            let json = null;
-            try { json = raw ? JSON.parse(raw) : null; } catch (e) { json = null; }
-            resolve({
-              ok: res.statusCode >= 200 && res.statusCode < 300,
-              status: res.statusCode,
-              headers: res.headers || {},
-              json,
-              raw,
-            });
-          });
-        }
-      );
-      req.on("error", reject);
-      req.setTimeout(timeoutMs, () => req.destroy(new Error("GitHub request timeout")));
-      if (data) req.write(data);
-      req.end();
-    } catch (e) {
-      reject(e);
-    }
-  });
-}
-
-async function githubListAllPages({ initialUrl, token, maxPages = 50 }) {
-  const all = [];
-  let url = initialUrl;
-  for (let i = 0; i < maxPages; i += 1) {
-    const r = await githubRequestJson({ url, token, timeoutMs: 20000 });
-    if (!r.ok) return { ok: false, status: r.status, json: r.json, raw: r.raw, items: all };
-    if (Array.isArray(r.json)) all.push(...r.json);
-    const links = parseLinkHeader(r.headers && r.headers.link);
-    if (!links.next) break;
-    url = links.next;
-  }
-  return { ok: true, status: 200, items: all };
-}
+const { parseLinkHeader, githubRequestJson, githubListAllPages } = githubApi;
 
 // Helper: fetch a GitHub API endpoint using token (preferred) or gh CLI (fallback).
 // Returns { ok, json, raw } — always resolves, never throws.
@@ -1040,7 +1009,10 @@ app.get("/api/accounts", (req, res) => {
     const config = loadConfig();
     const list = Object.entries(config.accounts || {}).map(([name, acc]) => ({
       name,
+      provider: acc.provider || "github",
       githubUser: acc.githubUser,
+      gitlabUser: acc.gitlabUser || "",
+      instanceUrl: acc.instanceUrl || "",
       sshHost: acc.sshHost || `github.com-${name}`,
       label: acc.label || name,
       email: acc.email || "",
@@ -1053,24 +1025,50 @@ app.get("/api/accounts", (req, res) => {
 
 app.post("/api/accounts", (req, res) => {
   try {
-    const { name: rawName, githubUser, label, email, sshHost } = req.body || {};
+    const { name: rawName, provider, githubUser, gitlabUser, label, email, sshHost, instanceUrl } = req.body || {};
     const name = sanitizeAccountName(String(rawName || "").trim());
     if (!name) return res.status(400).json({ error: "Invalid account name (use alphanumeric and hyphens only)" });
     const config = loadConfig();
     if (config.accounts[name]) return res.status(409).json({ error: "Account already exists" });
-    const safeUser = sanitizeOwnerName(githubUser);
-    if (!safeUser) return res.status(400).json({ error: "Invalid GitHub username" });
-    const safeSshHost =
-      sshHost === undefined || sshHost === null || String(sshHost).trim() === ""
-        ? `github.com-${name}`
-        : sanitizeSshHostAlias(String(sshHost));
-    if (!safeSshHost) return res.status(400).json({ error: "Invalid SSH host alias" });
-    config.accounts[name] = {
-      githubUser: safeUser,
-      sshHost: safeSshHost,
-      label: (label && String(label).trim().replace(/[\x00-\x1f]/g, "").slice(0, 128)) || name,
-      email: (email && String(email).trim().replace(/[\x00-\x1f]/g, "").slice(0, 256)) || "",
-    };
+
+    const prov = provider === "gitlab" ? "gitlab" : "github";
+
+    if (prov === "gitlab") {
+      const safeUser = sanitizeOwnerName(gitlabUser);
+      if (!safeUser) return res.status(400).json({ error: "Invalid GitLab username" });
+      const safeSshHost =
+        sshHost === undefined || sshHost === null || String(sshHost).trim() === ""
+          ? (() => {
+              const host = instanceUrl && String(instanceUrl).trim()
+                ? new URL(String(instanceUrl).trim()).hostname
+                : "gitlab.com";
+              return `${host}-${name}`;
+            })()
+          : sanitizeSshHostAlias(String(sshHost));
+      if (!safeSshHost) return res.status(400).json({ error: "Invalid SSH host alias" });
+      config.accounts[name] = {
+        provider: "gitlab",
+        gitlabUser: safeUser,
+        sshHost: safeSshHost,
+        label: (label && String(label).trim().replace(/[\x00-\x1f]/g, "").slice(0, 128)) || name,
+        email: (email && String(email).trim().replace(/[\x00-\x1f]/g, "").slice(0, 256)) || "",
+        instanceUrl: (instanceUrl && String(instanceUrl).trim()) || "",
+      };
+    } else {
+      const safeUser = sanitizeOwnerName(githubUser);
+      if (!safeUser) return res.status(400).json({ error: "Invalid GitHub username" });
+      const safeSshHost =
+        sshHost === undefined || sshHost === null || String(sshHost).trim() === ""
+          ? `github.com-${name}`
+          : sanitizeSshHostAlias(String(sshHost));
+      if (!safeSshHost) return res.status(400).json({ error: "Invalid SSH host alias" });
+      config.accounts[name] = {
+        githubUser: safeUser,
+        sshHost: safeSshHost,
+        label: (label && String(label).trim().replace(/[\x00-\x1f]/g, "").slice(0, 128)) || name,
+        email: (email && String(email).trim().replace(/[\x00-\x1f]/g, "").slice(0, 256)) || "",
+      };
+    }
     saveConfig(config);
     writeGitconfigForAccount(name);
     syncManagedSshConfigToAccounts();
@@ -1087,18 +1085,39 @@ app.put("/api/accounts/:name", (req, res) => {
     if (!name) return res.status(400).json({ error: "Invalid account name" });
     const config = loadConfig();
     if (!config.accounts[name]) return res.status(404).json({ error: "Account not found" });
-    const { githubUser, label, email, sshHost } = req.body || {};
-    if (githubUser !== undefined) {
-      const safe = sanitizeOwnerName(githubUser);
-      if (!safe) return res.status(400).json({ error: "Invalid GitHub username" });
-      config.accounts[name].githubUser = safe;
+    const { provider, githubUser, gitlabUser, label, email, sshHost, instanceUrl } = req.body || {};
+    const prov = provider === "gitlab" ? "gitlab" : (config.accounts[name].provider || "github");
+
+    if (provider !== undefined) config.accounts[name].provider = prov;
+
+    if (prov === "gitlab") {
+      if (gitlabUser !== undefined) {
+        const safe = sanitizeOwnerName(gitlabUser);
+        if (!safe) return res.status(400).json({ error: "Invalid GitLab username" });
+        config.accounts[name].gitlabUser = safe;
+      }
+      if (instanceUrl !== undefined) {
+        config.accounts[name].instanceUrl = String(instanceUrl).trim() || "";
+      }
+    } else {
+      if (githubUser !== undefined) {
+        const safe = sanitizeOwnerName(githubUser);
+        if (!safe) return res.status(400).json({ error: "Invalid GitHub username" });
+        config.accounts[name].githubUser = safe;
+      }
     }
+
     if (label !== undefined) config.accounts[name].label = String(label).trim().replace(/[\x00-\x1f]/g, "").slice(0, 128);
     if (email !== undefined) config.accounts[name].email = String(email).trim().replace(/[\x00-\x1f]/g, "").slice(0, 256);
     if (sshHost !== undefined) {
+      const defaultSshHost = prov === "gitlab"
+        ? (config.accounts[name].instanceUrl
+            ? new URL(config.accounts[name].instanceUrl).hostname
+            : "gitlab.com") + `-${name}`
+        : `github.com-${name}`;
       const safeSshHost =
         sshHost === null || String(sshHost).trim() === ""
-          ? `github.com-${name}`
+          ? defaultSshHost
           : sanitizeSshHostAlias(String(sshHost));
       if (!safeSshHost) return res.status(400).json({ error: "Invalid SSH host alias" });
       config.accounts[name].sshHost = safeSshHost;
@@ -1133,16 +1152,7 @@ app.delete("/api/accounts/:name", async (req, res) => {
       const config = loadConfig();
       delete config.accounts[name];
       saveConfig(config);
-
-      // Rewrite managed SSH config block to avoid stale Host entries.
-      try {
-        const accountsWithDirs = {};
-        for (const [n, acc] of Object.entries(config.accounts || {})) {
-          accountsWithDirs[n] = { ...acc, localDir: path.join(BASE_DIR, n) };
-        }
-        writeSSHConfigBlock(accountsWithDirs);
-      } catch (e) { /* ignore */ }
-
+      try { syncManagedSshConfigToAccounts(); } catch (e) { /* ignore */ }
       return res.json({ ok: true });
     }
     const dirs = fs.readdirSync(account.localDir, { withFileTypes: true });
@@ -1159,16 +1169,7 @@ app.delete("/api/accounts/:name", async (req, res) => {
     const config = loadConfig();
     delete config.accounts[name];
     saveConfig(config);
-
-    // Rewrite managed SSH config block to avoid stale Host entries.
-    try {
-      const accountsWithDirs = {};
-      for (const [n, acc] of Object.entries(config.accounts || {})) {
-        accountsWithDirs[n] = { ...acc, localDir: path.join(BASE_DIR, n) };
-      }
-      writeSSHConfigBlock(accountsWithDirs);
-    } catch (e) { /* ignore */ }
-
+    try { syncManagedSshConfigToAccounts(); } catch (e) { /* ignore */ }
     return res.json({ ok: true });
   } catch (e) {
     return res.status(500).json({ error: e.message });
@@ -1259,7 +1260,7 @@ app.get("/api/accounts/:name/status", async (req, res) => {
 
     // Ensure SSH config is up-to-date before checking (fixes stale state after manual key adds)
     syncManagedSshConfigToAccounts();
-    const knownHostsResult = ensureGitHubKnownHosts();
+    const knownHostsResult = ensureProviderKnownHosts(account.provider || "github");
 
     const sshDir = getSSHDir();
     const keyFile = path.join(sshDir, `id_ed25519_${name}`);
@@ -1306,7 +1307,7 @@ app.get("/api/accounts/:name/status", async (req, res) => {
       sshConfigured = hostFound && identityMatches;
     }
 
-    const sshHostUsed = sanitizeSshHostAlias(account.sshHost) || `github.com-${name}`;
+    const sshHostUsed = sanitizeSshHostAlias(account.sshHost) || `${account.provider === "gitlab" ? "gitlab.com" : "github.com"}-${name}`;
     let sshConnects = false;
     let sshTest = { tested: false, ok: false, reason: "skipped", message: "" };
     if (!sshKeyExists) {
@@ -1319,7 +1320,7 @@ app.get("/api/accounts/:name/status", async (req, res) => {
         message: "Local SSH config for this account is missing. Click Verify SSH to rebuild it.",
       };
     } else {
-      sshTest = testAccountSshConnection(sshHostUsed, account.githubUser);
+      sshTest = testAccountSshConnection(sshHostUsed, account.githubUser || account.gitlabUser, account.provider);
       sshConnects = !!sshTest.ok;
     }
 
@@ -1397,29 +1398,71 @@ function writeSSHConfigBlock(accounts) {
   const configPath = path.join(sshDir, "config");
   let existing = "";
   if (fs.existsSync(configPath)) existing = fs.readFileSync(configPath, "utf8");
-  const marker = SSH_MARKER;
-  const markerEnd = SSH_MARKER_END;
-  // Remove any existing managed blocks to avoid duplicates/stale hosts.
   const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const reCurrent = new RegExp(`${escapeRe(marker)}[\\s\\S]*?${escapeRe(markerEnd)}`, "g");
-  const cleaned = existing.replace(reCurrent, "").trimEnd();
-  const lines = [""];
-  lines.push(marker);
-  for (const [accName, acc] of Object.entries(accounts)) {
-    const keyPath = path.join(sshDir, `id_ed25519_${accName}`);
-    const host = sanitizeSshHostAlias(acc.sshHost) || `github.com-${accName}`;
-    lines.push("");
-    lines.push(`Host ${host}`);
-    lines.push("    HostName github.com");
-    lines.push("    User git");
-    lines.push(`    IdentityFile ${keyPath.replace(/\\/g, "/")}`);
-    lines.push("    IdentitiesOnly yes");
+
+  // Remove all existing managed blocks (both GitHub and GitLab)
+  const markers = [
+    [SSH_MARKER, SSH_MARKER_END],
+    [SSH_MARKER_GITLAB, SSH_MARKER_GITLAB_END],
+  ];
+  let cleaned = existing;
+  for (const [m, me] of markers) {
+    const re = new RegExp(`${escapeRe(m)}[\\s\\S]*?${escapeRe(me)}`, "g");
+    cleaned = cleaned.replace(re, "").trimEnd();
   }
-  lines.push("");
-  lines.push(markerEnd);
-  lines.push("");
-  const block = lines.join("\n");
-  fs.writeFileSync(configPath, cleaned + block, "utf8");
+
+  // Group accounts by provider
+  const githubAccounts = [];
+  const gitlabAccounts = [];
+  for (const [accName, acc] of Object.entries(accounts)) {
+    if ((acc.provider || "github") === "gitlab") {
+      gitlabAccounts.push([accName, acc]);
+    } else {
+      githubAccounts.push([accName, acc]);
+    }
+  }
+
+  const blocks = [];
+
+  if (githubAccounts.length > 0) {
+    const lines = [""];
+    lines.push(SSH_MARKER);
+    for (const [accName, acc] of githubAccounts) {
+      const keyPath = path.join(sshDir, `id_ed25519_${accName}`);
+      const host = sanitizeSshHostAlias(acc.sshHost) || `github.com-${accName}`;
+      lines.push("");
+      lines.push(`Host ${host}`);
+      lines.push("    HostName github.com");
+      lines.push("    User git");
+      lines.push(`    IdentityFile ${keyPath.replace(/\\/g, "/")}`);
+      lines.push("    IdentitiesOnly yes");
+    }
+    lines.push("");
+    lines.push(SSH_MARKER_END);
+    blocks.push(lines.join("\n"));
+  }
+
+  if (gitlabAccounts.length > 0) {
+    const lines = [""];
+    lines.push(SSH_MARKER_GITLAB);
+    for (const [accName, acc] of gitlabAccounts) {
+      const keyPath = path.join(sshDir, `id_ed25519_${accName}`);
+      const host = sanitizeSshHostAlias(acc.sshHost) || `gitlab.com-${accName}`;
+      const hostName = acc.instanceUrl ? new URL(acc.instanceUrl).hostname : "gitlab.com";
+      lines.push("");
+      lines.push(`Host ${host}`);
+      lines.push(`    HostName ${hostName}`);
+      lines.push("    User git");
+      lines.push(`    IdentityFile ${keyPath.replace(/\\/g, "/")}`);
+      lines.push("    IdentitiesOnly yes");
+    }
+    lines.push("");
+    lines.push(SSH_MARKER_GITLAB_END);
+    blocks.push(lines.join("\n"));
+  }
+
+  const block = blocks.join("\n");
+  fs.writeFileSync(configPath, (cleaned ? cleaned + "\n" : "") + block, "utf8");
 }
 
 function cleanupOrphanedGitconfigs() {
@@ -1445,12 +1488,7 @@ function cleanupOrphanedGitconfigs() {
 
 function syncManagedSshConfigToAccounts() {
   try {
-    const config = loadConfig();
-    const accountsWithDirs = {};
-    for (const [n, acc] of Object.entries(config.accounts || {})) {
-      accountsWithDirs[n] = { ...acc, localDir: path.join(BASE_DIR, n) };
-    }
-    writeSSHConfigBlock(accountsWithDirs);
+    writeSSHConfigBlock(getAccounts());
   } catch (e) { /* ignore */ }
 }
 
@@ -1463,7 +1501,9 @@ app.post("/api/accounts/:name/setup-ssh", (req, res) => {
 
     const sshDir = ensureSSHDir();
     const keyFile = path.join(sshDir, `id_ed25519_${name}`);
-    const comment = `${account.githubUser}@github-${name}`;
+    const login = account.githubUser || account.gitlabUser || name;
+    const providerLabel = providerRouting.getProviderDisplayName(account.provider);
+    const comment = `${login}@${account.provider === "gitlab" ? "gitlab" : "github"}-${name}`;
 
     if (!fs.existsSync(keyFile)) {
       execFileSync(
@@ -1473,13 +1513,8 @@ app.post("/api/accounts/:name/setup-ssh", (req, res) => {
       );
     }
 
-    const config = loadConfig();
-    const accountsWithDirs = {};
-    for (const [n, acc] of Object.entries(config.accounts || {})) {
-      accountsWithDirs[n] = { ...acc, localDir: path.join(BASE_DIR, n) };
-    }
-    writeSSHConfigBlock(accountsWithDirs);
-    ensureGitHubKnownHosts();
+    writeSSHConfigBlock(getAccounts());
+    ensureProviderKnownHosts(account.provider || "github");
 
     const pubPath = `${keyFile}.pub`;
     const publicKey = fs.existsSync(pubPath) ? fs.readFileSync(pubPath, "utf8").trim() : "";
@@ -1604,63 +1639,81 @@ app.get("/api/repos", async (req, res) => {
 
     for (const [accountName, account] of Object.entries(getAccounts())) {
       let repos = [];
-      const safeUser = String(account.githubUser).replace(/[^a-zA-Z0-9\-_]/g, "");
-
-      // 1) Prefer token-based auth (no terminal required; includes private repos).
+      const isGitLab = account.provider === "gitlab";
+      const safeUser = String(isGitLab ? (account.gitlabUser || "") : account.githubUser).replace(/[^a-zA-Z0-9\-_]/g, "");
       const token = await getAccountToken(accountName);
-      if (token) {
-        try {
-          const v = await validateAccountToken(accountName, account, token);
-          if (v.apiReady) {
-            const url = "https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner&page=1";
-            const result = await githubListAllPages({ initialUrl: url, token });
+
+      if (isGitLab) {
+        // GitLab: use token-based API
+        if (token) {
+          try {
+            const result = await gitlabApi.listGitlabRepos({ token, instanceUrl: account.instanceUrl });
             if (result.ok) {
-              repos = result.items
-                .filter((r) => r && r.owner && String(r.owner.login || "").toLowerCase() === safeUser.toLowerCase())
-                .map(mapRestRepoToGhLike);
+              repos = result.items;
             } else {
               accountErrors[accountName] = "token_failed";
             }
-          } else {
-            accountErrors[accountName] = v.reason === "mismatch" ? "token_mismatch" : "token_invalid";
-          }
-        } catch (e) {
-          accountErrors[accountName] = "token_failed";
-        }
-      }
-
-      // 2) If no token repos, try gh CLI if authenticated (includes private repos).
-      if (repos.length === 0) {
-        const isGhAuthed = ghAuthedLogins.has(safeUser);
-        if (isGhAuthed) {
-          try {
-            const result = await enqueueGh(safeUser, () =>
-              runCommand(
-                `gh repo list ${safeUser} --json name,description,isPrivate,primaryLanguage,updatedAt,url,stargazerCount,forkCount,diskUsage --limit 100`,
-                BASE_DIR,
-                20000
-              )
-            );
-            if (result.success) {
-              const parsed = JSON.parse(result.output || "[]");
-              repos = Array.isArray(parsed) ? parsed : [];
-            } else {
-              accountErrors[accountName] = accountErrors[accountName] || "gh_failed";
-            }
           } catch (e) {
-            accountErrors[accountName] = accountErrors[accountName] || "gh_failed";
+            accountErrors[accountName] = "token_failed";
           }
-        } else if (!accountErrors[accountName]) {
+        } else {
           accountErrors[accountName] = "auth_required";
         }
+      } else {
+        // 1) Prefer token-based auth (no terminal required; includes private repos).
+        if (token) {
+          try {
+            const v = await validateAccountToken(accountName, account, token);
+            if (v.apiReady) {
+              const url = "https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner&page=1";
+              const result = await githubListAllPages({ initialUrl: url, token });
+              if (result.ok) {
+                repos = result.items
+                  .filter((r) => r && r.owner && String(r.owner.login || "").toLowerCase() === safeUser.toLowerCase())
+                  .map(mapRestRepoToGhLike);
+              } else {
+                accountErrors[accountName] = "token_failed";
+              }
+            } else {
+              accountErrors[accountName] = v.reason === "mismatch" ? "token_mismatch" : "token_invalid";
+            }
+          } catch (e) {
+            accountErrors[accountName] = "token_failed";
+          }
+        }
+
+        // 2) If no token repos, try gh CLI if authenticated (includes private repos).
+        if (repos.length === 0) {
+          const isGhAuthed = ghAuthedLogins.has(safeUser);
+          if (isGhAuthed) {
+            try {
+              const result = await enqueueGh(safeUser, () =>
+                runCommand(
+                  `gh repo list ${safeUser} --json name,description,isPrivate,primaryLanguage,updatedAt,url,stargazerCount,forkCount,diskUsage --limit 100`,
+                  BASE_DIR,
+                  20000
+                )
+              );
+              if (result.success) {
+                const parsed = JSON.parse(result.output || "[]");
+                repos = Array.isArray(parsed) ? parsed : [];
+              } else {
+                accountErrors[accountName] = accountErrors[accountName] || "gh_failed";
+              }
+            } catch (e) {
+              accountErrors[accountName] = accountErrors[accountName] || "gh_failed";
+            }
+          } else if (!accountErrors[accountName]) {
+            accountErrors[accountName] = "auth_required";
+          }
+        }
       }
 
-      // No public fallback — repos only load with proper authentication (token or gh CLI).
-      // This keeps the flow clean: no auth = no repos.
-
       for (const repo of repos) {
-        const localPath = path.join(account.localDir, repo.name);
-        const isCloned = fs.existsSync(localPath) && fs.existsSync(path.join(localPath, ".git"));
+        const repoName = repo.name;
+        const groupPath = repo.groupPath || null;
+        const localPath = getRepoPath(accountName, repoName, groupPath);
+        const isCloned = localPath && fs.existsSync(localPath) && fs.existsSync(path.join(localPath, ".git"));
         let localInfo = null;
 
         if (isCloned) {
@@ -1668,19 +1721,23 @@ app.get("/api/repos", async (req, res) => {
         }
 
         const entry = {
-          name: repo.name,
+          name: repoName,
+          fullPath: repo.fullPath || null,
+          groupPath,
           account: accountName,
-          githubUser: account.githubUser,
+          provider: account.provider || "github",
+          githubUser: account.githubUser || "",
+          gitlabUser: account.gitlabUser || "",
           description: repo.description || "",
           language: repo.primaryLanguage?.name || "",
           visibility: repo.isPrivate ? "private" : "public",
-          url: repo.url || `https://github.com/${account.githubUser}/${repo.name}`,
+          url: repo.url || (isGitLab ? "" : `https://github.com/${account.githubUser}/${repoName}`),
           stars: repo.stargazerCount || 0,
           forks: repo.forkCount || 0,
           updatedAt: repo.updatedAt || "",
           diskUsage: repo.diskUsage || 0,
           isCloned,
-          ...(isCloned ? { localPath: path.resolve(localPath) } : {}),
+          ...(isCloned && localPath ? { localPath: path.resolve(localPath) } : {}),
           ...(localInfo || {
             localStatus: "not_cloned",
             branch: "",
@@ -1691,7 +1748,7 @@ app.get("/api/repos", async (req, res) => {
         };
 
         allRepos.push(entry);
-        seen.add(`${accountName}/${repo.name}`);
+        seen.add(`${accountName}/${repoName}`);
       }
     }
 
@@ -1699,26 +1756,22 @@ app.get("/api/repos", async (req, res) => {
     // These won't appear in gh repo list, but users still want them on the dashboard once cloned.
     for (const [accountName, account] of Object.entries(getAccounts())) {
       if (!fs.existsSync(account.localDir)) continue;
-      const dirs = fs.readdirSync(account.localDir, { withFileTypes: true });
-      for (const dir of dirs) {
-        if (!dir.isDirectory()) continue;
-        // SECURITY: prevent directory traversal via folder names like ".."
-        if (!dir.name || dir.name.includes("..")) continue;
-        const repoPath = path.join(account.localDir, dir.name);
-        if (!isPathInsideDir(account.localDir, repoPath)) continue;
-        if (!fs.existsSync(path.join(repoPath, ".git"))) continue;
-        const key = `${accountName}/${dir.name}`;
+      const isGitLab = account.provider === "gitlab";
+      const localRepos = scanRepos.scanLocalRepos({ localDir: account.localDir, accountName, account });
+      for (const repo of localRepos) {
+        const key = `${accountName}/${repo.fullPath}`;
         if (seen.has(key)) continue;
 
-        const status = getRepoStatus(repoPath) || {};
-        const origin = runCommand("git config --get remote.origin.url", repoPath, 5000);
+        const status = getRepoStatus(repo.repoPath) || {};
+        const origin = runCommand("git config --get remote.origin.url", repo.repoPath, 5000);
         const remoteUrl = origin.success ? String(origin.output || "").trim() : "";
-        const parsed = parseGitHubOwnerRepoFromRemote(remoteUrl);
-        const owner = parsed ? parsed.owner : account.githubUser;
-        const remoteRepo = parsed ? parsed.repo : dir.name;
+        const parsed = isGitLab ? parseGitLabRepoFromRemote(remoteUrl) : parseGitHubOwnerRepoFromRemote(remoteUrl);
+        const owner = parsed ? parsed.owner : (isGitLab ? account.gitlabUser : account.githubUser);
+        const remoteRepo = parsed ? parsed.repo : repo.name;
+        const groupPath = parsed && parsed.groupPath ? parsed.groupPath : null;
 
         let meta = null;
-        if (parsed) {
+        if (parsed && !isGitLab && parsed.provider === "github") {
           try {
             const metaResult = await enqueueGh(account.githubUser, () =>
               runCommand(
@@ -1736,19 +1789,22 @@ app.get("/api/repos", async (req, res) => {
         }
 
         allRepos.push({
-          name: dir.name,
+          name: repo.name,
+          fullPath: repo.fullPath || null,
+          groupPath: repo.groupPath || null,
           account: accountName,
+          provider: account.provider || "github",
           githubUser: owner,
           description: (meta && meta.description) ? meta.description : "",
           language: meta && meta.primaryLanguage ? (meta.primaryLanguage.name || "") : "",
           visibility: meta ? (meta.isPrivate ? "private" : "public") : "public",
-          url: (meta && meta.url) ? meta.url : (parsed ? `https://github.com/${owner}/${remoteRepo}` : ""),
+          url: (meta && meta.url) ? meta.url : (parsed ? `https://${parsed.hostname || "github.com"}/${owner}/${remoteRepo}` : ""),
           stars: (meta && meta.stargazerCount) ? meta.stargazerCount : 0,
           forks: (meta && meta.forkCount) ? meta.forkCount : 0,
           updatedAt: (meta && meta.updatedAt) ? meta.updatedAt : ((status.lastCommit && status.lastCommit.date) ? status.lastCommit.date : ""),
           diskUsage: (meta && meta.diskUsage) ? meta.diskUsage : 0,
           isCloned: true,
-          localPath: path.resolve(repoPath),
+          localPath: path.resolve(repo.repoPath),
           localStatus: status.localStatus || "clean",
           branch: status.branch || "",
           ahead: status.ahead || 0,
@@ -1782,21 +1838,17 @@ app.get("/api/repos/local", (req, res) => {
     for (const [accountName, account] of Object.entries(getAccounts())) {
       if (!fs.existsSync(account.localDir)) continue;
 
-      const dirs = fs.readdirSync(account.localDir, { withFileTypes: true });
-      for (const dir of dirs) {
-        if (!dir.isDirectory()) continue;
-        // SECURITY: prevent directory traversal via folder names like ".."
-        if (!dir.name || dir.name.includes("..")) continue;
-        const repoPath = path.join(account.localDir, dir.name);
-        if (!isPathInsideDir(account.localDir, repoPath)) continue;
-        if (!fs.existsSync(path.join(repoPath, ".git"))) continue;
-
-        const status = getRepoStatus(repoPath);
+      const found = scanRepos.scanLocalRepos({ localDir: account.localDir, accountName, account });
+      for (const repo of found) {
+        const status = getRepoStatus(repo.repoPath);
         localRepos.push({
-          name: dir.name,
+          name: repo.name,
+          groupPath: repo.groupPath,
+          fullPath: repo.fullPath,
           account: accountName,
-          githubUser: account.githubUser,
-          path: repoPath,
+          provider: account.provider || "github",
+          githubUser: account.githubUser || account.gitlabUser || "",
+          path: repo.repoPath,
           ...status,
         });
       }
@@ -1810,15 +1862,18 @@ app.get("/api/repos/local", (req, res) => {
 
 // --- POST /api/repos/clone - Clone a repo ---
 app.post("/api/repos/clone", (req, res) => {
-  const { account: accountName, repoName } = req.body;
+  const { account: accountName, repoName, groupPath } = req.body;
   const account = validateAccount(accountName);
-  const safeName = sanitizeRepoName(repoName);
+  const isGitLab = (account && account.provider) === "gitlab";
+  const safeName = isGitLab
+    ? sanitizeGitLabRepoName(repoName)
+    : sanitizeRepoName(repoName);
 
   if (!account || !safeName) {
     return res.status(400).json({ success: false, error: "Invalid account or repo name" });
   }
 
-  const targetPath = getRepoPath(accountName, safeName);
+  const targetPath = getRepoPath(accountName, safeName, isGitLab ? groupPath : null);
   if (!targetPath) {
     return res.status(400).json({ success: false, error: "Invalid path" });
   }
@@ -1827,7 +1882,15 @@ app.post("/api/repos/clone", (req, res) => {
     return res.status(409).json({ success: false, error: "Repo already cloned locally" });
   }
 
-  const cloneUrl = `git@${account.sshHost}:${account.githubUser}/${safeName}.git`;
+  // Create intermediate directories for GitLab nested group paths
+  const parentDir = path.dirname(targetPath);
+  if (!fs.existsSync(parentDir)) {
+    fs.mkdirSync(parentDir, { recursive: true });
+  }
+
+  const cloneUrl = isGitLab
+    ? `git@${account.sshHost}:${groupPath ? groupPath + "/" : ""}${safeName}.git`
+    : `git@${account.sshHost}:${account.githubUser}/${safeName}.git`;
   const opId = `clone-${safeName}-${Date.now()}`;
 
   activeOperations.set(opId, { type: "clone", repo: safeName, status: "running" });
@@ -1871,20 +1934,22 @@ app.post("/api/repos/clone", (req, res) => {
   res.json({ success: true, opId, message: `Cloning ${safeName}...` });
 });
 
-// --- POST /api/repos/clone-url - Clone any GitHub repo by URL into chosen account folder ---
+// --- POST /api/repos/clone-url - Clone any repo by URL into chosen account folder ---
 app.post("/api/repos/clone-url", (req, res) => {
   const { account: accountName, url, folderName } = req.body || {};
   const account = validateAccount(accountName);
   if (!account) return res.status(400).json({ success: false, error: "Invalid account" });
 
-  const parsed = parseGitHubRepoUrl(url);
+  const parsed = parseRepoUrl(url);
   if (!parsed) {
-    return res.status(400).json({ success: false, error: "Invalid GitHub repository URL" });
+    return res.status(400).json({ success: false, error: "Invalid repository URL. Supported: GitHub and GitLab." });
   }
 
+  const isGitLab = parsed.provider === "gitlab";
   const owner = parsed.owner;
   const repo = parsed.repo;
-  const safeRepoName = sanitizeRepoName(repo);
+  const groupPath = parsed.groupPath || null;
+  const safeRepoName = isGitLab ? sanitizeGitLabRepoName(repo) : sanitizeRepoName(repo);
   if (!safeRepoName) return res.status(400).json({ success: false, error: "Invalid repo name" });
 
   let desiredFolder = safeRepoName;
@@ -1912,15 +1977,23 @@ app.post("/api/repos/clone-url", (req, res) => {
     return res.status(500).json({ success: false, error: "Failed to allocate a unique local folder name" });
   }
 
-  const targetPath = getRepoPath(accountName, uniqueFolder);
+  const targetPath = getRepoPath(accountName, uniqueFolder, isGitLab ? groupPath : null);
   if (!targetPath) {
     return res.status(400).json({ success: false, error: "Invalid target path" });
   }
   // (Should be unique already, but keep a safety check)
   if (fs.existsSync(targetPath)) return res.status(409).json({ success: false, error: "Target folder already exists" });
 
+  // Create intermediate directories for nested group paths
+  const parentDir = path.dirname(targetPath);
+  if (!fs.existsSync(parentDir)) {
+    fs.mkdirSync(parentDir, { recursive: true });
+  }
+
   // Force cloning via the account SSH host alias to ensure the right key is used
-  const cloneUrl = `git@${account.sshHost}:${owner}/${safeRepoName}.git`;
+  const cloneUrl = isGitLab
+    ? `git@${account.sshHost}:${groupPath ? groupPath + "/" : ""}${safeRepoName}.git`
+    : `git@${account.sshHost}:${owner}/${safeRepoName}.git`;
   const opId = `clone-url-${uniqueFolder}-${Date.now()}`;
 
   activeOperations.set(opId, { type: "clone-url", repo: uniqueFolder, status: "running" });
@@ -2142,7 +2215,10 @@ app.post("/api/repos/migrate", (req, res) => {
     fs.renameSync(normalizedSource, targetPath);
 
     // Update remote URL to use SSH host alias
-    const newRemoteUrl = `git@${account.sshHost}:${account.githubUser}/${safeName}.git`;
+    const isGitLab = account.provider === "gitlab";
+    const newRemoteUrl = isGitLab
+      ? `git@${account.sshHost}:${safeName}.git`
+      : `git@${account.sshHost}:${account.githubUser}/${safeName}.git`;
     runGit(["remote", "set-url", "origin", newRemoteUrl], targetPath);
 
     broadcastSSE({
@@ -3172,17 +3248,17 @@ function collectHubSnapshot() {
   const repos = [];
   for (const [accountName, account] of Object.entries(getAccounts())) {
     if (!fs.existsSync(account.localDir)) continue;
-    const dirs = fs.readdirSync(account.localDir, { withFileTypes: true });
-    for (const dir of dirs) {
-      if (!dir.isDirectory() || !dir.name || dir.name.includes("..")) continue;
-      const repoPath = path.join(account.localDir, dir.name);
-      if (!fs.existsSync(path.join(repoPath, ".git"))) continue;
-      const status = getRepoStatus(repoPath);
+    const found = scanRepos.scanLocalRepos({ localDir: account.localDir, accountName, account });
+    for (const repo of found) {
+      const status = getRepoStatus(repo.repoPath);
       if (!status) continue;
       repos.push({
-        name: dir.name,
+        name: repo.name,
+        fullPath: repo.fullPath,
+        groupPath: repo.groupPath,
         account: accountName,
-        githubUser: account.githubUser,
+        githubUser: account.githubUser || account.gitlabUser || "",
+        provider: account.provider || "github",
         branch: status.branch,
         localStatus: status.localStatus,
         isCloned: true,
@@ -3281,6 +3357,50 @@ async function startHubAgent() {
   }
 }
 
+// =============================================================================
+// Path Migration — move repos from old flat layout to provider-based layout
+// =============================================================================
+function runPathMigration() {
+  const config = loadConfig();
+  const accounts = config.accounts || {};
+  let needsMigration = false;
+  for (const [name, acc] of Object.entries(accounts)) {
+    if (acc.provider) continue;
+    const oldDir = path.join(BASE_DIR, name);
+    if (!fs.existsSync(oldDir)) continue;
+    const entries = fs.readdirSync(oldDir).filter(f => {
+      try {
+        const full = path.join(oldDir, f);
+        return fs.statSync(full).isDirectory() && fs.existsSync(path.join(full, ".git"));
+      } catch { return false; }
+    });
+    if (entries.length > 0) { needsMigration = true; break; }
+  }
+  if (!needsMigration) return;
+  console.log("[migration] Detected repos in old directory layout. Starting migration...");
+  try {
+    const migratePath = path.join(__dirname, "scripts", "migrate-to-provider-paths.js");
+    if (fs.existsSync(migratePath)) {
+      const { spawnSync } = require("child_process");
+      const result = spawnSync(process.execPath, [migratePath, "--base-dir", BASE_DIR], {
+        stdio: "inherit",
+        timeout: 120000,
+      });
+      if (result.status === 0) {
+        console.log("[migration] Path migration completed successfully.");
+      } else {
+        console.warn("[migration] Path migration exited with code " + result.status);
+        console.warn("[migration] You can run it manually: node scripts/migrate-to-provider-paths.js");
+      }
+    } else {
+      console.warn("[migration] Migration script not found at " + migratePath);
+      console.warn("[migration] Run manually: node scripts/migrate-to-provider-paths.js");
+    }
+  } catch (err) {
+    console.warn("[migration] Failed to run migration:", err.message);
+  }
+}
+
 module.exports = {
   app,
   startServer,
@@ -3297,7 +3417,9 @@ if (require.main === module) {
   cleanupOrphanedGitconfigs();
   syncManagedSshConfigToAccounts();
   ensureGitHubKnownHosts();
+  ensureProviderKnownHosts("gitlab");
   loadPersistedTokensOnStartup();
+  runPathMigration();
   startServer(PORT);
   startHubAgent();
 }

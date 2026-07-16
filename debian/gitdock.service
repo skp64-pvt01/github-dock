@@ -1,0 +1,37 @@
+[Unit]
+Description=GitDock - Multi-Account GitHub/GitLab Manager
+Documentation=https://gitdock.dev
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gitdock
+Group=gitdock
+WorkingDirectory=/opt/gitdock
+ExecStart=/usr/bin/node /opt/gitdock/server.js
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Environment
+Environment=NODE_ENV=production
+Environment=GITDOCK_PORT=3847
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

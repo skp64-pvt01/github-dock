@@ -321,7 +321,10 @@ app.post("/api/agent/snapshot", snapshotLimiter, requireApiKey, (req, res) => {
     timestamp: body.timestamp || new Date().toISOString(),
     repos: repos.map((r) => ({
       name: r.name,
+      fullPath: r.fullPath || null,
+      groupPath: r.groupPath || null,
       account: r.account,
+      provider: r.provider || "github",
       githubUser: r.githubUser,
       branch: r.branch,
       localStatus: r.localStatus,
