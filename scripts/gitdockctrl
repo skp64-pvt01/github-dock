@@ -75,10 +75,47 @@ case "$CMD" in
     # otherwise user.
     if [ "$SCOPE" = "system" ] || [ "$EXPLICIT_SYSTEM" = true ]; then
       echo "Installing system service to /etc/systemd/system/gitdock.service (requires sudo/root)..."
-      # Prefer service file under /opt/gitdock, else fallback to script-relative
-      SRC_SERVICE="/opt/gitdock/gitdock.service"
-      [ ! -f "$SRC_SERVICE" ] && SRC_SERVICE="$SCRIPT_DIR/../gitdock.service"
+    # Prefer service file under /opt/gitdock, else fallback to known locations.
+    SRC_SERVICE_CANDIDATES=(
+      "/opt/gitdock/gitdock.service"
+      "$SCRIPT_DIR/../gitdock.service"
+      "$SCRIPT_DIR/gitdock.service"
+      "/usr/lib/gitdock/gitdock.service"
+    )
+    SRC_SERVICE=""
+    for c in "${SRC_SERVICE_CANDIDATES[@]}"; do
+      if [ -f "$c" ]; then
+        SRC_SERVICE="$c"; break
+      fi
+    done
+    if [ -n "$SRC_SERVICE" ]; then
       sudo cp "$SRC_SERVICE" /etc/systemd/system/gitdock.service
+    else
+      # Fallback: write a minimal system service unit directly
+      sudo tee /etc/systemd/system/gitdock.service > /dev/null <<'EOF'
+[Unit]
+Description=GitDock - Multi-Account GitHub/GitLab Manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /opt/gitdock/server.js
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+User=gitdock
+Group=gitdock
+WorkingDirectory=/opt/gitdock
+Environment=NODE_ENV=production
+Environment=GITDOCK_PORT=3847
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    fi
       sudo chmod 644 /etc/systemd/system/gitdock.service
       sudo systemctl daemon-reload
       sudo systemctl enable --now gitdock
@@ -92,9 +129,45 @@ case "$CMD" in
     else
       echo "Installing user service to ~/.config/systemd/user/gitdock.service..."
       mkdir -p "$HOME/.config/systemd/user"
-      SRC_USER="/opt/gitdock/gitdock.user.service"
-      [ ! -f "$SRC_USER" ] && SRC_USER="$SCRIPT_DIR/../gitdock.user.service"
-      cp "$SRC_USER" "$HOME/.config/systemd/user/gitdock.service"
+      # Find a user service unit in common locations, else write a minimal unit
+      SRC_USER_CANDIDATES=(
+        "/opt/gitdock/gitdock.user.service"
+        "$SCRIPT_DIR/../gitdock.user.service"
+        "$SCRIPT_DIR/gitdock.user.service"
+        "/usr/lib/gitdock/gitdock.user.service"
+      )
+      SRC_USER=""
+      for c in "${SRC_USER_CANDIDATES[@]}"; do
+        if [ -f "$c" ]; then
+          SRC_USER="$c"; break
+        fi
+      done
+      if [ -n "$SRC_USER" ]; then
+        cp "$SRC_USER" "$HOME/.config/systemd/user/gitdock.service"
+      else
+        # Fallback: write a minimal user service unit directly
+        cat > "$HOME/.config/systemd/user/gitdock.service" <<'EOF'
+[Unit]
+Description=GitDock - Multi-Account GitHub/GitLab Manager (User Service)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /opt/gitdock/server.js
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+WorkingDirectory=/opt/gitdock
+Environment=NODE_ENV=production
+Environment=GITDOCK_PORT=3847
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+EOF
+      fi
       chmod 644 "$HOME/.config/systemd/user/gitdock.service"
       systemctl --user daemon-reload
       systemctl --user enable --now gitdock
