@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+# gitdockctrl - helper to install/configure/start GitDock as a user or system service
+# Usage: gitdockctrl [install|uninstall|enable-system|disable-system|help] [--system]
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+INSTALL_DIR="/opt/gitdock"
+
+# Determine scope by effective UID: root => system scope, otherwise user scope
+if [ "$(id -u)" -eq 0 ]; then
+  SCOPE="system"
+else
+  SCOPE="user"
+fi
+
+usage(){
+  cat <<EOF
+gitdockctrl - manage GitDock service installation and startup
+
+Usage:
+  gitdockctrl install          Install and enable GitDock as a user service (no sudo)
+  gitdockctrl install --system Install GitDock as a system service (requires sudo; ignored when run as root)
+  gitdockctrl uninstall        Remove installed service files (user or system as applicable)
+  gitdockctrl enable-system    Enable & start the system service (requires sudo/root)
+  gitdockctrl disable-system   Stop & disable the system service (requires sudo/root)
+  gitdockctrl status           Show service status (systemctl status)
+  gitdockctrl start            Start the service
+  gitdockctrl stop             Stop the service
+  gitdockctrl restart          Restart the service
+  gitdockctrl log              Follow logs (journalctl -u gitdock -f)
+  gitdockctrl help             Show this message
+
+Examples:
+  # Install for the current user (recommended):
+  gitdockctrl install
+
+  # Install globally (systemd system service) - requires sudo:
+  sudo gitdockctrl install --system
+
+  # Enable system service later if you installed the package but want system service
+  sudo gitdockctrl enable-system
+
+  Notes:
+    - The package will not enable/start a system service by default. Use
+    --system or enable-system when you explicitly want the system-wide unit.
+  - User mode runs the service as your login user (services live under
+    ~/.config/systemd/user/gitdock.service) and is the recommended default for
+    single-user desktop/server installs where GitDock manages user-home paths.
+  - Scope selection: the helper decides scope automatically. Run as root/sudo
+    to operate on the system unit, run as normal user to manage the per-user
+    unit.
+EOF
+}
+
+if [ $# -lt 1 ]; then
+  usage
+  exit 1
+fi
+
+CMD="$1"; shift || true
+
+# Respect explicit --system flag only for install flow when called by non-root
+EXPLICIT_SYSTEM=false
+if [ "${1-}" = "--system" ]; then
+  EXPLICIT_SYSTEM=true
+  shift || true
+fi
+
+case "$CMD" in
+  help)
+    usage; exit 0 ;;
+
+  install)
+    # Determine desired install scope: root => system, explicit --system => system,
+    # otherwise user.
+    if [ "$SCOPE" = "system" ] || [ "$EXPLICIT_SYSTEM" = true ]; then
+      echo "Installing system service to /etc/systemd/system/gitdock.service (requires sudo/root)..."
+      # Prefer service file under /opt/gitdock, else fallback to script-relative
+      SRC_SERVICE="/opt/gitdock/gitdock.service"
+      [ ! -f "$SRC_SERVICE" ] && SRC_SERVICE="$SCRIPT_DIR/../gitdock.service"
+      sudo cp "$SRC_SERVICE" /etc/systemd/system/gitdock.service
+      sudo chmod 644 /etc/systemd/system/gitdock.service
+      sudo systemctl daemon-reload
+      sudo systemctl enable --now gitdock
+      # health check
+      sleep 1
+      if sudo systemctl is-active --quiet gitdock; then
+        echo "System service installed and running. Check: sudo systemctl status gitdock"
+      else
+        echo "System service installed but failed to start. Check journal: sudo journalctl -u gitdock -n 200"
+      fi
+    else
+      echo "Installing user service to ~/.config/systemd/user/gitdock.service..."
+      mkdir -p "$HOME/.config/systemd/user"
+      SRC_USER="/opt/gitdock/gitdock.user.service"
+      [ ! -f "$SRC_USER" ] && SRC_USER="$SCRIPT_DIR/../gitdock.user.service"
+      cp "$SRC_USER" "$HOME/.config/systemd/user/gitdock.service"
+      chmod 644 "$HOME/.config/systemd/user/gitdock.service"
+      systemctl --user daemon-reload
+      systemctl --user enable --now gitdock
+      # health check for user service
+      sleep 1
+      if systemctl --user is-active --quiet gitdock; then
+        echo "User service installed and running. Check: systemctl --user status gitdock"
+      else
+        echo "User service installed but failed to start. Check journal: journalctl --user -u gitdock -n 200"
+      fi
+      echo "Enabling linger so service can start at boot without login..."
+      sudo loginctl enable-linger "$USER" || echo "Could not enable linger (requires sudo); service will require login to start on boot"
+    fi
+    ;;
+
+  uninstall)
+    if [ -f "$HOME/.config/systemd/user/gitdock.service" ]; then
+      systemctl --user stop gitdock || true
+      systemctl --user disable gitdock || true
+      rm -f "$HOME/.config/systemd/user/gitdock.service"
+      systemctl --user daemon-reload || true
+      echo "Removed user service"
+    fi
+    if [ -f /etc/systemd/system/gitdock.service ]; then
+      sudo systemctl stop gitdock || true
+      sudo systemctl disable gitdock || true
+      sudo rm -f /etc/systemd/system/gitdock.service
+      sudo systemctl daemon-reload || true
+      echo "Removed system service"
+    fi
+    ;;
+
+  enable-system)
+    echo "Enabling & starting system service (requires sudo/root)..."
+    if [ "$SCOPE" = "system" ]; then
+      systemctl daemon-reload
+      systemctl enable --now gitdock
+      if systemctl is-active --quiet gitdock; then
+        echo "System service is active"
+      else
+        echo "System service failed to start; check: sudo journalctl -u gitdock -n 200"
+      fi
+    else
+      sudo systemctl daemon-reload
+      sudo systemctl enable --now gitdock
+    fi
+    ;;
+
+  disable-system)
+    echo "Stopping & disabling system service (requires sudo/root)..."
+    if [ "$SCOPE" = "system" ]; then
+      systemctl stop gitdock || true
+      systemctl disable gitdock || true
+    else
+      sudo systemctl stop gitdock || true
+      sudo systemctl disable gitdock || true
+    fi
+    ;;
+
+  status)
+    if [ "$SCOPE" = "system" ]; then
+      systemctl status gitdock --no-pager
+    else
+      systemctl --user status gitdock --no-pager
+    fi
+    ;;
+
+  start)
+    if [ "$SCOPE" = "system" ]; then
+      systemctl start gitdock
+      sleep 1
+      if systemctl is-active --quiet gitdock; then
+        echo "Service started (system scope)."
+      else
+        echo "Failed to start system service; inspect: sudo journalctl -u gitdock -n 200"
+      fi
+    else
+      systemctl --user start gitdock
+      sleep 1
+      if systemctl --user is-active --quiet gitdock; then
+        echo "Service started (user scope)."
+      else
+        echo "Failed to start user service; inspect: journalctl --user -u gitdock -n 200"
+      fi
+    fi
+    ;;
+
+  stop)
+    if [ "$SCOPE" = "system" ]; then
+      systemctl stop gitdock
+      sleep 1
+      if systemctl is-active --quiet gitdock; then
+        echo "Failed to stop system service; it is still active."
+      else
+        echo "Service stopped (system scope)."
+      fi
+    else
+      systemctl --user stop gitdock
+      sleep 1
+      if systemctl --user is-active --quiet gitdock; then
+        echo "Failed to stop user service; it is still active."
+      else
+        echo "Service stopped (user scope)."
+      fi
+    fi
+    ;;
+
+  restart)
+    if [ "$SCOPE" = "system" ]; then
+      systemctl restart gitdock
+      sleep 1
+      if systemctl is-active --quiet gitdock; then
+        echo "Service restarted (system scope)."
+      else
+        echo "Service restart failed (system scope); check: sudo journalctl -u gitdock -n 200"
+      fi
+    else
+      systemctl --user restart gitdock
+      sleep 1
+      if systemctl --user is-active --quiet gitdock; then
+        echo "Service restarted (user scope)."
+      else
+        echo "Service restart failed (user scope); check: journalctl --user -u gitdock -n 200"
+      fi
+    fi
+    ;;
+
+  log)
+    if [ "$SCOPE" = "system" ]; then
+      journalctl -u gitdock -f
+    else
+      journalctl --user -u gitdock -f
+    fi
+    ;;
+
+  *)
+    echo "Unknown command: $CMD" >&2; usage; exit 2 ;;
+esac
+
+exit 0
