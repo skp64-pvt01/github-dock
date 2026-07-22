@@ -66,3 +66,6 @@ yarn-error.log*
 
 # Generated PDFs
 *.pdf
+
+# Graphify output (code analysis cache & artifacts)
+graphify-out/

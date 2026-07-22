@@ -88,12 +88,11 @@ if (process.env.GITDOCK_TEST === "1") {
 }
 
 function reloadBaseDirFromWorkspace() {
-  if (!isPkg && !isStandalone) return;
-  const ws = workspaceModule.loadWorkspace();
+  const ws = workspaceModule.getActiveWorkspace();
   if (ws) {
-    BASE_DIR = ws;
+    BASE_DIR = ws.path;
     CONFIG_PATH = path.join(BASE_DIR, "config.json");
-    console.log("[workspace] BASE_DIR updated to: " + BASE_DIR);
+    console.log("[workspace] BASE_DIR updated to: " + BASE_DIR + " (" + ws.name + ")");
   }
 }
 
@@ -262,7 +261,23 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(APP_DIR, "dashboard.html"));
 });
 
-// Workspace setup API
+// Workspace API
+function validateDirPath(dirPath) {
+  if (!dirPath || typeof dirPath !== "string" || dirPath.trim().length < 3) {
+    return "Invalid directory path";
+  }
+  const resolved = path.resolve(dirPath.trim());
+  if (process.env.GITDOCK_TEST !== "1") {
+    if (!isPathInsideDir(os.homedir(), resolved)) {
+      return "Workspace must be within your home directory";
+    }
+    if (resolved === path.parse(resolved).root || resolved === os.homedir()) {
+      return "Workspace cannot be a root directory or your home folder directly";
+    }
+  }
+  return null;
+}
+
 app.get("/api/workspace/status", (req, res) => {
   const workspace = require("./workspace");
   if (process.env.GITDOCK_TEST === "1") {
@@ -272,29 +287,94 @@ app.get("/api/workspace/status", (req, res) => {
       defaultPath: workspace.getDefaultWorkspacePath(),
     });
   }
-  const ws = workspace.loadWorkspace();
+  const active = workspace.getActiveWorkspace();
+  const all = workspace.listWorkspaces();
   res.json({
-    configured: !!ws,
-    path: ws,
+    configured: !!active,
+    path: active ? active.path : null,
+    active: active ? { name: active.name, path: active.path } : null,
+    workspaces: all.map(w => ({ name: w.name, path: w.path })),
     defaultPath: workspace.getDefaultWorkspacePath(),
   });
 });
+
+app.get("/api/workspaces", (req, res) => {
+  const workspace = require("./workspace");
+  const active = workspace.getActiveWorkspace();
+  res.json({
+    workspaces: workspace.listWorkspaces().map(w => ({
+      name: w.name,
+      path: w.path,
+      active: active ? w.name === active.name : false,
+    })),
+  });
+});
+
+app.post("/api/workspaces/probe", (req, res) => {
+  const workspace = require("./workspace");
+  const err = validateDirPath(req.body.path);
+  if (err) return res.status(400).json({ success: false, error: err });
+  try {
+    const result = workspace.probePath(req.body.path);
+    res.json({ success: true, ...result });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post("/api/workspaces", (req, res) => {
+  const workspace = require("./workspace");
+  const { name, path: dirPath } = req.body;
+  if (!name || typeof name !== "string" || name.trim().length < 1) {
+    return res.status(400).json({ success: false, error: "Workspace name is required" });
+  }
+  if (name.includes("/") || name.includes("\\")) {
+    return res.status(400).json({ success: false, error: "Workspace name cannot contain slashes" });
+  }
+  const err = validateDirPath(dirPath);
+  if (err) return res.status(400).json({ success: false, error: err });
+  try {
+    const result = workspace.addWorkspace(name.trim(), dirPath);
+    if (!result.success) return res.status(400).json(result);
+    res.json({ success: true, message: 'Workspace "' + name.trim() + '" added' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.put("/api/workspaces/activate", (req, res) => {
+  const workspace = require("./workspace");
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ success: false, error: "Workspace name required" });
+  try {
+    const result = workspace.activateWorkspace(name);
+    if (!result.success) return res.status(400).json(result);
+    reloadBaseDirFromWorkspace();
+    res.json({ success: true, path: result.path, name: result.name, message: "Switched to " + name });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.delete("/api/workspaces/:name", (req, res) => {
+  const workspace = require("./workspace");
+  try {
+    const result = workspace.removeWorkspace(req.params.name);
+    if (!result.success) return res.status(400).json(result);
+    const active = workspace.getActiveWorkspace();
+    if (active) reloadBaseDirFromWorkspace();
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.post("/api/workspace/setup", (req, res) => {
   const workspace = require("./workspace");
-  const { path: dirPath } = req.body;
-  if (!dirPath || typeof dirPath !== "string" || dirPath.trim().length < 3) {
-    return res.status(400).json({ success: false, error: "Invalid directory path" });
-  }
-  const resolvedPath = path.resolve(dirPath.trim());
-  const homeDir = os.homedir();
-  if (!isPathInsideDir(homeDir, resolvedPath)) {
-    return res.status(400).json({ success: false, error: "Workspace must be within your home directory" });
-  }
-  if (resolvedPath === path.parse(resolvedPath).root || resolvedPath === homeDir) {
-    return res.status(400).json({ success: false, error: "Workspace cannot be a root directory or your home folder directly" });
-  }
+  const err = validateDirPath(req.body.path);
+  if (err) return res.status(400).json({ success: false, error: err });
   try {
-    const resolved = workspace.saveWorkspace(dirPath);
+    const resolved = workspace.saveWorkspace(req.body.path);
     reloadBaseDirFromWorkspace();
     res.json({ success: true, path: resolved, message: "Workspace configured" });
   } catch (err) {
@@ -334,7 +414,15 @@ app.post("/api/cleanup", async (req, res) => {
         const configPath = path.join(sshDir, "config");
         if (fs.existsSync(configPath)) {
           const content = fs.readFileSync(configPath, "utf8");
-          const cleaned = content.replace(/# GitDock[^\n]*\nHost github\.com-[^\n]*\n(\s+[^\n]*\n)*/gi, "").trim();
+          const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const markers = [
+            ["# --- GitHub Multi-Account (managed by GitDock) ---", "# --- End GitHub Multi-Account ---"],
+            ["# --- GitLab Multi-Account (managed by GitDock) ---", "# --- End GitLab Multi-Account ---"],
+          ];
+          let cleaned = content;
+          for (const [m, me] of markers) {
+            cleaned = cleaned.replace(new RegExp(`${escapeRe(m)}[\\s\\S]*?${escapeRe(me)}`, "g"), "").trimEnd();
+          }
           if (cleaned !== content.trim()) {
             fs.writeFileSync(configPath, cleaned ? cleaned + "\n" : "", "utf8");
           }
@@ -1193,9 +1281,12 @@ app.post("/api/accounts/:name/auth/token", async (req, res) => {
     const remember = !!(req.body && req.body.remember);
     if (!token || token.length < 10) return res.status(400).json({ ok: false, error: "Token is required" });
 
-    const validation = await validateAccountToken(name, account, token);
+    const isGitLab = account.provider === "gitlab";
+    const validation = isGitLab
+      ? await gitlabApi.validateGitlabToken(token, account.instanceUrl)
+      : await validateAccountToken(name, account, token);
     if (!validation.ok) {
-      if (validation.reason === "mismatch") {
+      if (!isGitLab && validation.reason === "mismatch") {
         return res.status(400).json({ ok: false, error: `Token belongs to ${validation.login}, expected ${account.githubUser}` });
       }
       return res.status(401).json({ ok: false, error: validation.message || "Invalid token" });
@@ -1242,7 +1333,10 @@ app.get("/api/accounts/:name/auth/status", async (req, res) => {
     if (!account) return res.status(404).json({ ok: false, error: "Account not found" });
     const token = await getAccountToken(name);
     if (!token) return res.json({ ok: true, connected: false });
-    const validation = await validateAccountToken(name, account, token);
+    const isGitLab = account.provider === "gitlab";
+    const validation = isGitLab
+      ? await gitlabApi.validateGitlabToken(token, account.instanceUrl)
+      : await validateAccountToken(name, account, token);
     return res.json({
       ok: true,
       connected: !!validation.apiReady,
@@ -1355,7 +1449,10 @@ app.get("/api/accounts/:name/status", async (req, res) => {
     try {
       const token = await getAccountToken(name);
       if (token) {
-        const validation = await validateAccountToken(name, account, token);
+        const isGitLab = account.provider === "gitlab";
+        const validation = isGitLab
+          ? await gitlabApi.validateGitlabToken(token, account.instanceUrl)
+          : await validateAccountToken(name, account, token);
         tokenAuthenticated = !!validation.ok;
         tokenApiReady = !!validation.apiReady;
         tokenReposAccess = !!validation.reposAccess;
@@ -3017,19 +3114,44 @@ app.post("/api/repos/extras", async (req, res) => {
 
   // Group repos by account
   const byAccount = {};
+  const byAccountFull = {}; // GitLab: map accountName -> [{ name, fullPath }]
   for (const r of repos) {
     const account = validateAccount(r.account);
     const safeName = sanitizeRepoName(r.name);
     if (!account || !safeName) continue;
-    if (!byAccount[r.account]) byAccount[r.account] = [];
+    if (!byAccount[r.account]) { byAccount[r.account] = []; byAccountFull[r.account] = []; }
     byAccount[r.account].push(safeName);
+    byAccountFull[r.account].push({ name: safeName, fullPath: r.fullPath || null });
   }
 
   for (const [accountName, repoNames] of Object.entries(byAccount)) {
     const account = validateAccount(accountName);
     if (!account) continue;
 
-    // Build GraphQL query - batch all repos for this account
+    const isGitLab = account.provider === "gitlab";
+
+    if (isGitLab) {
+      // GitLab: use GraphQL via gitlab-api.js
+      try {
+        const token = await getAccountToken(accountName);
+        if (!token) continue;
+        const fullPaths = byAccountFull[accountName]
+          .map((r) => r.fullPath)
+          .filter(Boolean);
+        if (fullPaths.length === 0) continue;
+        const result = await gitlabApi.getGitlabRepoExtras({ token, instanceUrl: account.instanceUrl, repoNames: fullPaths });
+        if (result.ok) {
+          Object.entries(result.extras).forEach(([fullPath, val]) => {
+            extras[`${accountName}/${fullPath}`] = { prs: val.prs, issues: val.issues };
+          });
+        }
+      } catch (err) {
+        console.error(`[extras] GitLab GraphQL error for ${accountName}:`, err.message);
+      }
+      continue;
+    }
+
+    // GitHub: build GraphQL query - batch all repos for this account
     const fields = repoNames
       .map((name, i) => {
         const escapedName = name.replace(/"/g, '\\"');

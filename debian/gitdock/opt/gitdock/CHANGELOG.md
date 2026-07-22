@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Multi-workspace management** — `workspace.js` rewritten from single-path to multi-workspace storage (`listWorkspaces`, `getActiveWorkspace`, `activateWorkspace`, `addWorkspace`, `removeWorkspace`, `probePath`). Storage in `~/.gitdock/workspace.json` (overridable via `GITDOCK_DIR` env var).
+- **Workspace API** — `GET/POST /api/workspaces`, `POST /api/workspaces/probe`, `PUT /api/workspaces/activate`, `DELETE /api/workspaces/:name`. Legacy `GET /api/workspace/status` and `POST /api/workspace/setup` preserved.
+- **Workspace UI** — settings modal redesigned with active workspace display (name + path), dropdown selector + Switch button, workspace list with active indicator and delete, Add Workspace panel with Name/Path inputs + Probe + Add.
+- **Probe detection** — `probePath()` detects existing `config.json` (accounts) and `.git` directories in target path.
+- **37 unit and API integration tests** covering add/remove/activate/probe/list edge cases, name validation, legacy backward compat, `GITDOCK_DIR` env var.
 - **GitLab provider support** — full-stack integration across all layers.
 - **Provider dispatch layer** (`lib/provider-routing.js`) — `getRepoPath()`, `getLocalDir()`, `getSshHost()`, `getCloneUrl()` for GitHub (flat) and GitLab (nested group/subgroup) paths.
 - **GitLab API client** (`lib/gitlab-api.js`) — list repos via Personal Access Token with `read_api` scope.
