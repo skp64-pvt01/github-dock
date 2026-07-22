@@ -1,0 +1,22 @@
+Package: gitdock
+Version: 1.2.0-1
+Architecture: all
+Maintainer: GitDock Dev <dev@gitdock.dev>
+Installed-Size: 5188
+Depends: nodejs (>= 18), adduser
+Recommends: git (>= 2.30), gh
+Suggests: glab, curl, wget
+Section: utils
+Priority: optional
+Homepage: https://gitdock.dev
+Description: Local dashboard for managing multiple GitHub (and GitLab) accounts
+ GitDock is a web-based utility for managing GitHub and GitLab hosted
+ repositories. It provides a local web dashboard that allows users to:
+  - list and clone repositories under a defined workspace
+  - manage authentication via personal access tokens
+  - configure SSH keys per account
+  - perform git operations (commit, push, pull, branch, stash)
+  - monitor repo activity across multiple machines (via GitDock Hub)
+ .
+ GitDock runs as a systemd service on localhost:3847 and is accessible
+ only from the local machine.

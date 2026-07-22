@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+  remove|purge)
+    # Stop and disable the service
+    systemctl stop gitdock 2>/dev/null || true
+    systemctl disable gitdock 2>/dev/null || true
+    systemctl daemon-reload 2>/dev/null || true
+    ;;
+esac

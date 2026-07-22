@@ -1,0 +1,35 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+  configure)
+    # Create gitdock user (system account, no login shell)
+    if ! getent passwd gitdock >/dev/null 2>&1; then
+      adduser --system --group --home /opt/gitdock --no-create-home \
+        --disabled-login --quiet gitdock 2>/dev/null || true
+    fi
+
+    # Install npm dependencies if not already present
+    if [ -f /opt/gitdock/package.json ] && [ ! -d /opt/gitdock/node_modules ]; then
+      cd /opt/gitdock && npm install --omit=dev --no-audit --no-fund 2>&1 | tail -3 || true
+    fi
+
+    # Set ownership
+    chown -R gitdock:gitdock /opt/gitdock 2>/dev/null || true
+    chmod 755 /opt/gitdock
+    chmod 644 /opt/gitdock/*.js /opt/gitdock/*.json /opt/gitdock/*.md /opt/gitdock/*.html 2>/dev/null || true
+    chmod 755 /opt/gitdock/start.sh 2>/dev/null || true
+
+    # Ensure log directory exists
+    mkdir -p /var/log/gitdock
+    chown gitdock:gitdock /var/log/gitdock
+    chmod 755 /var/log/gitdock
+
+    # Enable and start the service
+    if systemctl --quiet is-enabled gitdock 2>/dev/null || [ ! -f /etc/systemd/system/gitdock.service ]; then
+      systemctl daemon-reload 2>/dev/null || true
+      systemctl enable gitdock 2>/dev/null || true
+      systemctl start gitdock 2>/dev/null || true
+    fi
+    ;;
+esac

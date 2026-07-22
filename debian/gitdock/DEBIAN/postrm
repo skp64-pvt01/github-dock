@@ -1,0 +1,13 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+  purge)
+    # Remove log directory
+    rm -rf /var/log/gitdock 2>/dev/null || true
+    # Remove gitdock user (only on purge, not remove)
+    if getent passwd gitdock >/dev/null 2>&1; then
+      userdel -r gitdock 2>/dev/null || true
+    fi
+    ;;
+esac

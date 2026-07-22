@@ -1,0 +1,8 @@
+gitdock (1.2.0-1) unstable; urgency=medium
+
+  * Initial Debian package.
+  * Systemd service integration.
+  * Multi-account GitHub and GitLab support.
+  * Provider-aware workspace directory structure.
+
+ -- GitDock Dev <dev@gitdock.dev>  Thu, 17 Jul 2026 00:00:00 +0000
