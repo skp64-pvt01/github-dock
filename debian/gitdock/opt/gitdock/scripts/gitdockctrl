@@ -65,6 +65,11 @@ if [ "${1-}" = "--system" ]; then
   EXPLICIT_SYSTEM=true
   shift || true
 fi
+EXPLICIT_LOCAL=false
+if [ "${1-}" = "--local" ]; then
+  EXPLICIT_LOCAL=true
+  shift || true
+fi
 
 case "$CMD" in
   help)
@@ -154,18 +159,26 @@ EOF
         fi
       done
       if [ -n "$SRC_USER" ]; then
-        if [ -n "$REPO_ROOT" ]; then
-          # Replace /opt/gitdock with the repository root when we actually
-          # detected a repo checkout.
+        if [ "$EXPLICIT_LOCAL" = true ] && [ -n "$REPO_ROOT" ]; then
+          # Only rewrite the unit to point at the checkout when the user asked
+          # for a local install (explicit --local). Default installs should
+          # continue to target /opt/gitdock so they remain stable.
           sed "s|/opt/gitdock|$REPO_ROOT|g" "$SRC_USER" > "$HOME/.config/systemd/user/gitdock.service"
         else
-          # Copy the unit as-is (installed helper case).
+          # Copy the unit as-is (installed helper or default packaged install).
           cp "$SRC_USER" "$HOME/.config/systemd/user/gitdock.service"
         fi
       else
         # Fallback: write a minimal user service unit directly. Point at
         # REPO_ROOT when present, otherwise default to /opt/gitdock.
-        TARGET_ROOT=${REPO_ROOT:-/opt/gitdock}
+        # Only use the repo checkout as the target when explicit local flag is
+        # passed AND we actually detected a checkout. Otherwise default to the
+        # packaged location (/opt/gitdock) which is permanent for installs.
+        if [ "$EXPLICIT_LOCAL" = true ] && [ -n "$REPO_ROOT" ]; then
+          TARGET_ROOT="$REPO_ROOT"
+        else
+          TARGET_ROOT="/opt/gitdock"
+        fi
         cat > "$HOME/.config/systemd/user/gitdock.service" <<EOF
 [Unit]
 Description=GitDock - Multi-Account GitHub/GitLab Manager (User Service)
