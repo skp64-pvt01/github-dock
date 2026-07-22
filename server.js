@@ -288,9 +288,12 @@ function validateDirPath(dirPath) {
 // Expand leading ~ to the current user's home directory
 function expandHome(dirPath) {
   if (!dirPath || typeof dirPath !== 'string') return dirPath;
+  // Replace leading ~ when followed by end or slash/backslash
+  // e.g. ~, ~/foo, ~\foo
   if (dirPath === '~') return os.homedir();
-  if (dirPath.startsWith('~/') || dirPath.startsWith('~\\')) {
-    return path.join(os.homedir(), dirPath.slice(2));
+  // Use regex to replace only a leading ~ with the os.homedir()
+  if (/^~(?=$|[\/])/.test(dirPath)) {
+    return dirPath.replace(/^~(?=$|[\/])/, os.homedir());
   }
   return dirPath;
 }
@@ -401,10 +404,12 @@ app.use((err, req, res, next) => {
 
 app.post("/api/workspace/setup", (req, res) => {
   const workspace = require("./workspace");
-  const err = validateDirPath(req.body.path);
+  const rawPath = req.body.path;
+  const expanded = expandHome(rawPath);
+  const err = validateDirPath(expanded);
   if (err) return res.status(400).json({ success: false, error: err });
   try {
-    const resolved = workspace.saveWorkspace(req.body.path);
+    const resolved = workspace.saveWorkspace(expanded);
     reloadBaseDirFromWorkspace();
     res.json({ success: true, path: resolved, message: "Workspace configured" });
   } catch (err) {
