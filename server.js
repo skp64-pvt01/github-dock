@@ -285,6 +285,16 @@ function validateDirPath(dirPath) {
   return null;
 }
 
+// Expand leading ~ to the current user's home directory
+function expandHome(dirPath) {
+  if (!dirPath || typeof dirPath !== 'string') return dirPath;
+  if (dirPath === '~') return os.homedir();
+  if (dirPath.startsWith('~/') || dirPath.startsWith('~\\')) {
+    return path.join(os.homedir(), dirPath.slice(2));
+  }
+  return dirPath;
+}
+
 app.get("/api/workspace/status", (req, res) => {
   const workspace = require("./workspace");
   if (process.env.GITDOCK_TEST === "1") {
@@ -319,10 +329,12 @@ app.get("/api/workspaces", (req, res) => {
 
 app.post("/api/workspaces/probe", (req, res) => {
   const workspace = require("./workspace");
-  const err = validateDirPath(req.body.path);
+  const rawPath = req.body.path;
+  const expanded = expandHome(rawPath);
+  const err = validateDirPath(expanded);
   if (err) return res.status(400).json({ success: false, error: err });
   try {
-    const result = workspace.probePath(req.body.path);
+    const result = workspace.probePath(expanded);
     res.json({ success: true, ...result });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
@@ -338,10 +350,11 @@ app.post("/api/workspaces", (req, res) => {
   if (name.includes("/") || name.includes("\\")) {
     return res.status(400).json({ success: false, error: "Workspace name cannot contain slashes" });
   }
-  const err = validateDirPath(dirPath);
+  const expanded = expandHome(dirPath);
+  const err = validateDirPath(expanded);
   if (err) return res.status(400).json({ success: false, error: err });
   try {
-    const result = workspace.addWorkspace(name.trim(), dirPath);
+    const result = workspace.addWorkspace(name.trim(), expanded);
     if (!result.success) return res.status(400).json(result);
     res.json({ success: true, message: 'Workspace "' + name.trim() + '" added' });
   } catch (e) {
@@ -354,6 +367,7 @@ app.put("/api/workspaces/activate", (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ success: false, error: "Workspace name required" });
   try {
+    // Expand ~ for workspace names that might have been created with ~ in path
     const result = workspace.activateWorkspace(name);
     if (!result.success) return res.status(400).json(result);
     reloadBaseDirFromWorkspace();
