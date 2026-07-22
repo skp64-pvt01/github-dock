@@ -12,7 +12,10 @@ function ensureGitDockDir() {
 }
 
 function getDefaultWorkspacePath() {
-  return path.join(os.homedir(), "GitDock");
+  // Default workspace path exposed to the UI. Use the packaged UI default
+  // under ~/Projects/GitDockWkspc so adding via the dashboard pre-fills a safe
+  // user-local path when running as a user service.
+  return path.join(os.homedir(), "Projects", "GitDockWkspc");
 }
 
 // Expand leading ~ to the current user's home directory
@@ -54,6 +57,13 @@ function activateWorkspace(name) {
   const data = loadData();
   const ws = (data.workspaces || []).find(w => w.name === name);
   if (!ws) return { success: false, error: "Workspace not found: " + name };
+  // Normalize stored path on activation to avoid literal ~ remaining in stored data.
+  try {
+    const normalized = path.resolve(expandHome(String(ws.path || "")));
+    ws.path = normalized;
+  } catch (e) {
+    // If normalization fails, leave original and continue — activation should still happen
+  }
   data.active = name;
   saveData(data);
   return { success: true, path: ws.path, name: ws.name };
@@ -61,6 +71,7 @@ function activateWorkspace(name) {
 
 function addWorkspace(name, dirPath) {
   const resolved = path.resolve(expandHome(dirPath.trim()));
+  console.log("[workspace] addWorkspace called with", { name, dirPath, resolved });
   if (!fs.existsSync(resolved)) {
     fs.mkdirSync(resolved, { recursive: true });
   }
@@ -97,7 +108,12 @@ function removeWorkspace(name) {
 
 function loadWorkspace() {
   const ws = getActiveWorkspace();
-  return ws ? ws.path : null;
+  if (!ws) return null;
+  try {
+    return path.resolve(expandHome(String(ws.path || "")));
+  } catch (e) {
+    return ws.path;
+  }
 }
 
 function isWorkspaceConfigured() {

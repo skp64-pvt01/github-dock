@@ -157,7 +157,7 @@ EOF
         if [ -n "$REPO_ROOT" ]; then
           # Replace /opt/gitdock with the repository root when we actually
           # detected a repo checkout.
-        sed "s|/opt/gitdock|$REPO_ROOT|g" "$SRC_USER" > "$HOME/.config/systemd/user/gitdock.service"
+          sed "s|/opt/gitdock|$REPO_ROOT|g" "$SRC_USER" > "$HOME/.config/systemd/user/gitdock.service"
         else
           # Copy the unit as-is (installed helper case).
           cp "$SRC_USER" "$HOME/.config/systemd/user/gitdock.service"

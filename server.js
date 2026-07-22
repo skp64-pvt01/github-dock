@@ -77,11 +77,78 @@ const {
   gitlabOfficialKeysInKnownHosts,
 } = security;
 
-let BASE_DIR = (isPkg || isStandalone) ? (workspaceModule.loadWorkspace() || path.dirname(process.execPath)) : __dirname;
+// Determine default BASE_DIR. Priority:
+// 1) saved workspace (workspace.json)
+// 2) per-user default when running as a real user: ~/Projects/GitDockWkspc
+// 3) packaged executable dir (when packaged or standalone)
+// 4) source dir (__dirname) when running from source as developer
+const uid = (typeof process.getuid === 'function') ? process.getuid() : null;
+const isRealUser = typeof uid === 'number' && uid >= 1000 && uid !== 0;
+// Determine BASE_DIR with clear precedence and diagnostics. We will:
+// 1) prefer an explicitly saved workspace unless it points at the packaged
+//    executable directory and the process is running as a normal user (we
+//    treat that case as uninitialized and prefer the per-user default),
+// 2) else prefer the per-user default when running as a real user,
+// 3) else packaged executable dir when available, else source dir.
+let loadedWorkspace = null;
+try {
+  loadedWorkspace = workspaceModule.loadWorkspace();
+} catch (e) {
+  loadedWorkspace = null;
+}
+let BASE_DIR = null;
+const execDir = path.dirname(process.execPath);
+if (loadedWorkspace) {
+  try {
+    const lw = path.resolve(String(loadedWorkspace));
+    // If the saved workspace equals the packaged exec dir but we're a real
+    // user, ignore it and prefer the per-user default (avoids /opt being
+    // auto-selected for interactive users).
+    if (isRealUser && lw === execDir) {
+      console.log('[startup] Ignoring saved workspace that points to the executable dir for a real user');
+      BASE_DIR = workspaceModule.getDefaultWorkspacePath();
+    } else {
+      BASE_DIR = lw;
+    }
+  } catch (e) {
+    BASE_DIR = loadedWorkspace;
+  }
+} else if (isRealUser) {
+  BASE_DIR = workspaceModule.getDefaultWorkspacePath();
+} else if (isPkg || isStandalone) {
+  BASE_DIR = execDir;
+} else {
+  BASE_DIR = __dirname;
+}
+
+// Diagnostic: log the decision path for easier debugging during startup
+try {
+  console.log('[startup] BASE_DIR decision', {
+    loadedWorkspace: loadedWorkspace || null,
+    isRealUser,
+    isPkg,
+    isStandalone,
+    execDir,
+    chosen: BASE_DIR,
+  });
+} catch (e) {}
+// Normalize BASE_DIR to an absolute path and expand ~ if present. This prevents
+// literal '~' strings from ending up in BASE_DIR when coming from saved state.
+try {
+  if (typeof BASE_DIR === 'string') {
+    if (BASE_DIR === '~') BASE_DIR = os.homedir();
+    else if (/^~(?=$|[\\/])/.test(BASE_DIR)) BASE_DIR = BASE_DIR.replace(/^~(?=$|[\\/])/, os.homedir());
+    BASE_DIR = path.resolve(BASE_DIR);
+  }
+} catch (e) { /* ignore normalization errors and keep raw BASE_DIR */ }
 let CONFIG_PATH = path.join(BASE_DIR, "config.json");
 
-// Auto-init workspace from current BASE_DIR when running from source
-if (!isPkg && !isStandalone && process.env.GITDOCK_TEST !== "1") {
+// Auto-init workspace from current BASE_DIR when running as a real user.
+// This ensures fresh user installs (including packaged/standalone runs launched
+// by a normal user) default to the per-user workspace path instead of the
+// packaged /opt location. Do not auto-init when running as a system service
+// user (uid < 1000) to avoid writing into system accounts.
+if (isRealUser && process.env.GITDOCK_TEST !== "1") {
   const existing = workspaceModule.listWorkspaces().find(w => w.path === BASE_DIR);
   if (existing) {
     workspaceModule.activateWorkspace(existing.name);
@@ -103,6 +170,8 @@ function reloadBaseDirFromWorkspace() {
     BASE_DIR = ws.path;
     CONFIG_PATH = path.join(BASE_DIR, "config.json");
     console.log("[workspace] BASE_DIR updated to: " + BASE_DIR + " (" + ws.name + ")");
+    // Debug: log active workspace object
+    try { console.log('[workspace] active workspace object:', JSON.stringify(ws)); } catch (e) {}
   }
 }
 
@@ -354,6 +423,7 @@ app.post("/api/workspaces", (req, res) => {
     return res.status(400).json({ success: false, error: "Workspace name cannot contain slashes" });
   }
   const expanded = expandHome(dirPath);
+  console.log('[workspace API] add workspace request', { raw: dirPath, expanded });
   const err = validateDirPath(expanded);
   if (err) return res.status(400).json({ success: false, error: err });
   try {
