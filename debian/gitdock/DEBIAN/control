@@ -2,11 +2,10 @@ Package: gitdock
 Version: 1.2.0-1
 Architecture: all
 Maintainer: GitDock Dev <dev@gitdock.dev>
-Installed-Size: 5251
+Installed-Size: 5232
 Depends: nodejs (>= 18), adduser
 Recommends: git (>= 2.30), gh
 Suggests: glab, curl, wget
-Replaces: gitdockctrl
 Section: utils
 Priority: optional
 Homepage: https://gitdock.dev
@@ -21,7 +20,3 @@ Description: Local dashboard for managing multiple GitHub (and GitLab) accounts
  .
  GitDock runs as a systemd service on localhost:3847 and is accessible
  only from the local machine.
- .
- # NOTE: The package will not enable a systemd system service by default on
- # installation. Use the included `gitdockctrl` helper to install or enable a
- # system service explicitly, or run GitDock as a per-user service (recommended).

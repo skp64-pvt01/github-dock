@@ -25,21 +25,11 @@ case "$1" in
     chown gitdock:gitdock /var/log/gitdock
     chmod 755 /var/log/gitdock
 
-    # NOTE: Do not enable or start the system service by default during package
-    # installation. Users may prefer to run GitDock as a per-user service or
-    # explicitly enable the system service. The helper utility `gitdockctrl`
-    # can be used to install/enable/start the desired service mode.
-
-    # The postinst intentionally avoids starting the system unit. Admins who
-    # wish to enable the system service should run:
-    #   sudo systemctl enable --now gitdock
-    # Or use the provided helper script (after installing the package):
-    #   /usr/local/bin/gitdockctrl install  # run as root to install system unit
-    # The helper is installed to /usr/bin by the package (dh_install).
-
-    # If /usr/local/bin/gitdockctrl exists, ensure it is executable
-    if [ -f /usr/local/bin/gitdockctrl ]; then
-      chmod 755 /usr/local/bin/gitdockctrl 2>/dev/null || true
+    # Enable and start the service
+    if systemctl --quiet is-enabled gitdock 2>/dev/null || [ ! -f /etc/systemd/system/gitdock.service ]; then
+      systemctl daemon-reload 2>/dev/null || true
+      systemctl enable gitdock 2>/dev/null || true
+      systemctl start gitdock 2>/dev/null || true
     fi
     ;;
 esac
