@@ -3180,10 +3180,20 @@ function openTokenModal(accountName) {
   var disconnectBtn = document.getElementById('tokenModalDisconnectBtn');
   if (disconnectBtn) disconnectBtn.style.display = 'none';
   openModal('tokenModal');
-  // Ask server for connection status
+  // Ask server for connection status (token) and also check gh CLI auth so
+  // the modal accurately reflects GitHub CLI-based auth when users choose
+  // "Option B: GitHub CLI (gh)". The token endpoint only reports token
+  // storage; gh CLI auth is reported by the full status endpoint.
   apiGet('/accounts/' + encodeURIComponent(accountName) + '/auth/status').then(function(s) {
     if (document.getElementById('tokenModalAccount').value !== accountName) return;
-    if (disconnectBtn) disconnectBtn.style.display = (s && s.connected) ? 'inline-flex' : 'none';
+    var tokenConnected = !!(s && s.connected);
+    if (disconnectBtn) disconnectBtn.style.display = tokenConnected ? 'inline-flex' : 'none';
+    // Also check gh CLI state and show disconnect affordance when gh is active
+    apiGet('/accounts/' + encodeURIComponent(accountName) + '/status').then(function(st) {
+      if (document.getElementById('tokenModalAccount').value !== accountName) return;
+      var ghActive = !!(st && st.ghAuthenticated);
+      if (disconnectBtn) disconnectBtn.style.display = (tokenConnected || ghActive) ? 'inline-flex' : 'none';
+    }).catch(function(){});
   }).catch(function(){});
 }
 
