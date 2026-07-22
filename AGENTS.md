@@ -26,6 +26,13 @@
 - **`hub/dashboard.html`** — provider badge (GitHub/GitLab) on repo cards and rows; GitLab `fullPath` shown below repo name; search filters include provider and fullPath; CSS `.rc-provider--github/.gitlab` and `.rc-fullpath`
 - **`server.js`** — `collectHubSnapshot()` already includes `provider`/`groupPath`/`fullPath` (verified)
 
+### Phase 8 ✓ — Multi-Workspace Management
+- **`workspace.js`** — rewritten from single-path storage to multi-workspace: `listWorkspaces()`, `getActiveWorkspace()`, `activateWorkspace()`, `addWorkspace()`, `removeWorkspace()`, `probePath()` (detects existing `config.json` accounts and `.git` repos in target dir). Storage in `~/.gitdock/workspace.json` (overridable via `GITDOCK_DIR` env var). Legacy `saveWorkspace()`/`loadWorkspace()` preserved for backward compat.
+- **`server.js`** — new endpoints: `GET /api/workspaces`, `POST /api/workspaces`, `POST /api/workspaces/probe`, `PUT /api/workspaces/activate`, `DELETE /api/workspaces/:name`. Legacy `GET /api/workspace/status` and `POST /api/workspace/setup` preserved. `validateDirPath()` extended with home-directory containment check. `reloadBaseDirFromWorkspace()` no longer gated on `isPkg || isStandalone`.
+- **`dashboard.html`** — settings modal redesigned with active workspace name (15px bold) + monospace path, dropdown selector + Switch button, full workspace list with active indicator and delete (✕), Add Workspace panel with Name/Path inputs + Probe + Add buttons.
+- **`test/workspace.test.js`** — 37 tests (18 unit + 19 API integration) covering add/remove/activate/probe/list edge cases, name validation, legacy compat, `GITDOCK_DIR` env var.
+- All 233 tests pass (196 existing + 37 new).
+
 ### Phase 7 ✓ — One-Time Migration
 - **`scripts/migrate-to-provider-paths.js`** — standalone migration script: moves `BASE_DIR/<acct>/<repo>` → `BASE_DIR/github/<acct>/<repo>` for accounts without `provider` field. Safety: dry-run mode, undo log (revert with `--undo`), skips existing targets, verifies `.git` dir, case-insensitive FS safe. Post-migration: removes empty old account dirs, updates config.json with `provider: "github"`, prints summary.
 - **`server.js`** — `runPathMigration()` hook runs at startup: checks for old-location repos and auto-invokes the migration script with `child_process.spawnSync`. Graceful fallback if script is missing.
@@ -33,7 +40,7 @@
 ### Active — (none)
 
 ### Remaining Phases
-8. Testing & Polish
+_(all phases complete)_
 
 ## Key Files
 | File | Purpose |
@@ -44,6 +51,7 @@
 | `lib/github-api.js` | GitHub REST API client (extracted from server.js) |
 | `lib/git-api.js` | Git output parsing (provider-agnostic) |
 | `lib/dormant.js` | Dormant repo detection |
+| `workspace.js` | Multi-workspace storage, probe, legacy compat |
 | `dashboard.html` | Main dashboard UI |
 | `workspace-setup.html` | First-run setup wizard |
 
