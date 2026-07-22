@@ -37,7 +37,9 @@
 - **`scripts/migrate-to-provider-paths.js`** — standalone migration script: moves `BASE_DIR/<acct>/<repo>` → `BASE_DIR/github/<acct>/<repo>` for accounts without `provider` field. Safety: dry-run mode, undo log (revert with `--undo`), skips existing targets, verifies `.git` dir, case-insensitive FS safe. Post-migration: removes empty old account dirs, updates config.json with `provider: "github"`, prints summary.
 - **`server.js`** — `runPathMigration()` hook runs at startup: checks for old-location repos and auto-invokes the migration script with `child_process.spawnSync`. Graceful fallback if script is missing.
 
-### Active — (none)
+### Fixed
+- **Workspace visibility** — main page header now shows active workspace name + path; settings panel shows current base directory path even without a managed workspace.
+- **Workspace auto-init** — server auto-creates/activates a "Default" workspace from `BASE_DIR` when running from source, keeping the workspace system in sync with the actual base directory.
 
 ### Remaining Phases
 _(all phases complete)_

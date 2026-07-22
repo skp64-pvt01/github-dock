@@ -80,6 +80,16 @@ const {
 let BASE_DIR = (isPkg || isStandalone) ? (workspaceModule.loadWorkspace() || path.dirname(process.execPath)) : __dirname;
 let CONFIG_PATH = path.join(BASE_DIR, "config.json");
 
+// Auto-init workspace from current BASE_DIR when running from source
+if (!isPkg && !isStandalone && process.env.GITDOCK_TEST !== "1") {
+  const existing = workspaceModule.listWorkspaces().find(w => w.path === BASE_DIR);
+  if (existing) {
+    workspaceModule.activateWorkspace(existing.name);
+  } else {
+    workspaceModule.addWorkspace("Default", BASE_DIR);
+  }
+}
+
 if (process.env.GITDOCK_TEST === "1") {
   const testRoot = process.env.GITDOCK_TEST_ROOT || path.join(os.tmpdir(), `gitdock-test-${process.pid}`);
   BASE_DIR = testRoot;
@@ -291,7 +301,7 @@ app.get("/api/workspace/status", (req, res) => {
   const all = workspace.listWorkspaces();
   res.json({
     configured: !!active,
-    path: active ? active.path : null,
+    path: active ? active.path : BASE_DIR,
     active: active ? { name: active.name, path: active.path } : null,
     workspaces: all.map(w => ({ name: w.name, path: w.path })),
     defaultPath: workspace.getDefaultWorkspacePath(),

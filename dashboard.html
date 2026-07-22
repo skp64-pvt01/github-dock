@@ -1369,6 +1369,10 @@ body {
       <span class="app-title">GitDock</span>
       <span class="app-sub" id="lastUpdated">Connecting...</span>
     </div>
+    <div id="wsIndicator" style="display:none;margin-left:16px;padding-left:16px;border-left:1px solid var(--border);font-size:11px;line-height:1.3">
+      <div id="wsIndicatorName" style="font-weight:600;color:var(--t1)"></div>
+      <div id="wsIndicatorPath" style="font-family:monospace;color:var(--t3);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+    </div>
   </div>
   <div class="app-top-actions">
     <a id="hubLinkBtn" href="#" class="btn btn-sm btn-hub" title="Open Hub (multi-machine overview)" data-configured="false" onclick="if(this.getAttribute('data-configured')!=='true'){event.preventDefault();openHubModal();}">
@@ -2145,6 +2149,11 @@ async function loadSettingsData() {
       wh += '<div style="margin-bottom:10px">';
       wh += '<div style="font-size:15px;font-weight:700;color:var(--t1)">' + esc(ws.active.name) + '</div>';
       wh += '<div style="font-size:11px;color:var(--t3);font-family:monospace;word-break:break-all;margin-top:2px">' + esc(ws.active.path) + '</div>';
+      wh += '</div>';
+    } else if (ws.path) {
+      wh += '<div style="margin-bottom:10px">';
+      wh += '<div style="font-size:11px;color:var(--t3)">Current base directory (not managed as workspace)</div>';
+      wh += '<div style="font-size:12px;font-family:monospace;color:var(--t1);word-break:break-all;margin-top:2px">' + esc(ws.path) + '</div>';
       wh += '</div>';
     } else {
       wh += '<div style="margin-bottom:10px;color:var(--t3);font-size:13px">No active workspace</div>';
@@ -4527,9 +4536,33 @@ document.getElementById('cloneUrlFolderName').addEventListener('keydown', functi
   if (e.key === 'Escape') { e.preventDefault(); closeOpenModals(); }
 });
 
+// --- Workspace Indicator (header) ---
+async function updateWorkspaceIndicator() {
+  try {
+    var ws = await apiGet('/workspace/status');
+    var el = document.getElementById('wsIndicator');
+    var nameEl = document.getElementById('wsIndicatorName');
+    var pathEl = document.getElementById('wsIndicatorPath');
+    if (ws.active) {
+      nameEl.textContent = ws.active.name;
+      pathEl.textContent = ws.active.path;
+      el.style.display = '';
+    } else if (ws.path) {
+      nameEl.textContent = 'Workspace';
+      pathEl.textContent = ws.path;
+      el.style.display = '';
+    } else {
+      el.style.display = 'none';
+    }
+  } catch (e) {
+    document.getElementById('wsIndicator').style.display = 'none';
+  }
+}
+
 // --- Init ---
 connectSSE();
 refreshRepos();
+updateWorkspaceIndicator();
 </script>
 </body>
 </html>
