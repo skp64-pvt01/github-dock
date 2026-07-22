@@ -2891,6 +2891,15 @@ async function checkAccountStatus(name, publicKeyToShow, options) {
         '<button type="button" class="setup-action" id="setupVerifySshBtn" onclick="verifySshSetup()">Verify SSH</button>' +
         (s.tokenApiReady ? ('<button type="button" class="setup-action" onclick="uploadSshKey(\'' + escAttr(requestedFor) + '\')">Upload key via API</button>') : '') +
         '</div>';
+
+      // Offer user the option to update ~/.ssh/config automatically. This is a safer
+      // explicit affordance so we don't modify user config without their consent.
+      step3Extra += '<div style="margin-top:8px;font-size:13px;display:flex;gap:8px;align-items:center">' +
+        '<label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="sshWriteConfigCb"> Also update <code>~/.ssh/config</code> for this account</label>' +
+        '<button type="button" class="setup-action" onclick="generateAndWriteSshConfig(\'' + escAttr(requestedFor) + '\')">Generate + Update config</button>' +
+        '<button type="button" class="setup-action" onclick="useExistingSshConfig(\'' + escAttr(requestedFor) + '\')">Use existing SSH config</button>' +
+        '</div>';
+
       if (!s.sshConfigured && s.sshTest && s.sshTest.reason === 'not_configured') {
         step3Extra += '<div class="setup-hint" style="color:var(--red)">' + esc(s.sshTest.message) + '</div>';
       }
@@ -2953,6 +2962,10 @@ async function checkAccountStatus(name, publicKeyToShow, options) {
     step(5, 'Ready to use this account', s.ready, s.ready ? statusDone : statusPending('Finish parts A and B.'), readyExtra);
 
     el.innerHTML = h;
+    // After rendering the setup timeline, check for an existing SSH Host block in ~/.ssh/config
+    // and show a non-destructive banner offering to adopt it. The server endpoint only detects; it
+    // does not persist anything until the user clicks Adopt.
+    try { detectSshConfig(requestedFor); } catch (e) { /* ignore */ }
 
     // Show/hide "Load Repos & Close" button
     var loadBtn = document.getElementById('setupLoadReposBtn');
@@ -2985,16 +2998,136 @@ function setupDoneLoadRepos() {
   refreshRepos();
 }
 
-async function runSetupSSH(name) {
+async function runSetupSSH(name, options) {
+  // options: { writeConfig: boolean }
   try {
-    var r = await fetch(API + '/accounts/' + encodeURIComponent(name) + '/setup-ssh', { method: 'POST', headers: { 'X-GitDock': '1' } });
+    options = options || {};
+    // First, ask server for any existing public key
+    var existing = await fetch(API + '/accounts/' + encodeURIComponent(name) + '/ssh/public-key');
+    var existsData = await existing.json();
+    if (existsData && existsData.exists && existsData.publicKey) {
+      lastPublicKey = existsData.publicKey;
+      toast('Existing SSH key found for this account. Use Upload or Verify instead.', 'info');
+      checkAccountStatus(name, existsData.publicKey);
+      return;
+    }
+
+    // No existing key — generate one. Only write SSH config/known_hosts if writeConfig is true.
+    var body = {};
+    if (options.writeConfig) body.writeConfig = true;
+    var r = await fetch(API + '/accounts/' + encodeURIComponent(name) + '/setup-ssh', { method: 'POST', headers: { 'X-GitDock': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     var data = await r.json();
     if (data.ok && data.publicKey) {
       var provider = (allAccounts[name] && allAccounts[name].provider) || 'github';
-      toast('SSH key generated. Copy it, add on ' + (provider === 'gitlab' ? 'GitLab' : 'GitHub') + ', then click Verify SSH.', 'success');
+      var msg = 'SSH key generated. Copy it, add on ' + (provider === 'gitlab' ? 'GitLab' : 'GitHub') + ', then click Verify SSH.';
+      if (data.configWritten) msg = 'SSH key generated and SSH config updated. Copy the public key to ' + (provider === 'gitlab' ? 'GitLab' : 'GitHub') + ' to verify.';
+      toast(msg, 'success');
       lastPublicKey = data.publicKey;
       checkAccountStatus(name, data.publicKey);
     } else { toast(data.error || 'Setup failed', 'error'); }
+  } catch (e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// Called by the checkbox/button in the setup UI to generate a key and optionally write SSH config
+async function generateAndWriteSshConfig(name) {
+  try {
+    var cb = document.getElementById('sshWriteConfigCb');
+    var write = !!(cb && cb.checked);
+    // Call runSetupSSH with explicit writeConfig flag
+    await runSetupSSH(name, { writeConfig: write });
+  } catch (e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// Try to adopt an existing Host block from ~/.ssh/config for this account
+async function useExistingSshConfig(name) {
+  try {
+    var data = await apiPost('/accounts/' + encodeURIComponent(name) + '/ssh/use-existing', {});
+    if (data && data.ok && data.used) {
+      toast('Adopted existing SSH Host: ' + (data.sshHost || ''), 'success');
+      // Reload account status
+      checkAccountStatus(name, null, { verify: false });
+      // Show an inline Undo affordance so the user can quickly revert the adoption
+      try { showUndoAdopt(name); } catch (e) { /* ignore */ }
+      loadAccounts();
+    } else {
+      toast((data && data.error) ? data.error : 'No usable SSH Host found in ~/.ssh/config', 'error');
+    }
+  } catch (e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// Detect an existing SSH config Host/IdentityFile candidate and show a banner (non-persistent)
+async function detectSshConfig(name) {
+  try {
+    var acc = allAccounts[name];
+    // If account already has sshHost configured, don't prompt
+    if (acc && acc.sshHost) return;
+    var data = await apiGet('/accounts/' + encodeURIComponent(name) + '/ssh/detect');
+    if (data && data.ok && data.found) {
+      renderDetectBanner(name, data.sshHost, data.identityFile);
+    } else {
+      clearDetectBanner();
+    }
+  } catch (e) { /* ignore detection errors */ }
+}
+
+function renderDetectBanner(name, host, identityFile) {
+  try {
+    var wrap = document.getElementById('accountManagerSetup');
+    if (!wrap) return;
+    // Remove existing banner if any
+    clearDetectBanner();
+    var b = document.createElement('div');
+    b.id = 'sshDetectBanner';
+    b.className = 'setup-step';
+    b.style.border = '1px dashed rgba(59,130,246,0.12)';
+    var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">' +
+      '<div style="flex:1"><strong>Detected SSH Host:</strong> <code>' + esc(host) + '</code>' +
+      (identityFile ? ' <small style="color:var(--t3);margin-left:6px">(' + esc(identityFile) + ')</small>' : '') +
+      '<div class="setup-hint" style="margin-top:6px;color:var(--t2)">GitDock found a Host block in your <code>~/.ssh/config</code> that looks like it belongs to this account.</div></div>' +
+      '<div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0">' +
+      '<button class="setup-action setup-action-primary" onclick="(function(){ useExistingSshConfig(\'' + escAttr(name) + '\'); clearDetectBanner(); })()">Adopt</button>' +
+      '<button class="setup-action" onclick="clearDetectBanner()">Ignore</button>' +
+      '</div></div>';
+    b.innerHTML = html;
+    var container = document.getElementById('accountManagerSetupTimeline');
+    if (container) container.parentNode.insertBefore(b, container);
+  } catch (e) { /* ignore */ }
+}
+
+function clearDetectBanner() {
+  var ex = document.getElementById('sshDetectBanner');
+  if (ex && ex.parentNode) ex.parentNode.removeChild(ex);
+}
+
+// Show an Undo button after adopting an existing SSH Host. Undo clears account.sshHost.
+function showUndoAdopt(name) {
+  try {
+    // Remove any previous undo
+    var existing = document.getElementById('sshAdoptUndo');
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+    var container = document.getElementById('accountManagerSetupTimeline');
+    if (!container) return;
+    var d = document.createElement('div');
+    d.id = 'sshAdoptUndo';
+    d.style.margin = '8px 0';
+    d.innerHTML = '<div class="setup-step"><div class="setup-step-dot pending">!</div><div class="setup-step-body"><strong>SSH Host adopted</strong><div class="setup-hint">You can undo this action if it was accidental.</div><div class="setup-step-actions"><button class="setup-action" onclick="(function(){ undoAdopt(\'' + escAttr(name) + '\'); })()">Undo</button></div></div></div>';
+    container.parentNode.insertBefore(d, container);
+  } catch (e) { /* ignore */ }
+}
+
+async function undoAdopt(name) {
+  try {
+    var resp = await apiPut('/accounts/' + encodeURIComponent(name), { sshHost: '' });
+    if (resp && resp.ok) {
+      toast('SSH Host cleared for account', 'success');
+      // Refresh UI
+      clearDetectBanner();
+      var undoEl = document.getElementById('sshAdoptUndo'); if (undoEl && undoEl.parentNode) undoEl.parentNode.removeChild(undoEl);
+      loadAccounts();
+      checkAccountStatus(name, null, { verify: false });
+    } else {
+      toast((resp && resp.error) ? resp.error : 'Failed to clear sshHost', 'error');
+    }
   } catch (e) { toast('Error: ' + e.message, 'error'); }
 }
 

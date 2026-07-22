@@ -2,7 +2,7 @@ Package: gitdock
 Version: 1.2.0-1
 Architecture: all
 Maintainer: GitDock Dev <dev@gitdock.dev>
-Installed-Size: 5264
+Installed-Size: 5281
 Depends: nodejs (>= 18), adduser
 Recommends: git (>= 2.30), gh
 Suggests: glab, curl, wget

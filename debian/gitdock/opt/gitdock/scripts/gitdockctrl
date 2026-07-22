@@ -6,12 +6,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="/opt/gitdock"
 
-# Determine scope by effective UID: root => system scope, otherwise user scope
-if [ "$(id -u)" -eq 0 ]; then
-  SCOPE="system"
+# Determine target user/home when installing user services.
+# If run under sudo, SUDO_USER is the intended user; otherwise use current user.
+if [ -n "${SUDO_USER-}" ]; then
+  TARGET_USER="$SUDO_USER"
 else
-  SCOPE="user"
+  TARGET_USER="$USER"
 fi
+TARGET_HOME="$(getent passwd "$TARGET_USER" | cut -d: -f6)"
+if [ -z "$TARGET_HOME" ]; then
+  TARGET_HOME="$HOME"
+fi
+
+PREFERRED_SCOPE="user"  # default to per-user systemd units unless --system explicitly passed
+SCOPE="$PREFERRED_SCOPE"
 
 usage(){
   cat <<EOF
@@ -76,9 +84,13 @@ case "$CMD" in
     usage; exit 0 ;;
 
   install)
-    # Determine desired install scope: root => system, explicit --system => system,
-    # otherwise user.
-    if [ "$SCOPE" = "system" ] || [ "$EXPLICIT_SYSTEM" = true ]; then
+    # Determine desired install scope: explicit --system => system, otherwise user-level unit
+    if [ "$EXPLICIT_SYSTEM" = true ]; then
+      SCOPE="system"
+    else
+      SCOPE="user"
+    fi
+    if [ "$SCOPE" = "system" ]; then
       echo "Installing system service to /etc/systemd/system/gitdock.service (requires sudo/root)..."
     # Prefer service file under /opt/gitdock, else fallback to known locations.
     SRC_SERVICE_CANDIDATES=(
@@ -132,8 +144,8 @@ EOF
         echo "System service installed but failed to start. Check journal: sudo journalctl -u gitdock -n 200"
       fi
     else
-      echo "Installing user service to ~/.config/systemd/user/gitdock.service..."
-      mkdir -p "$HOME/.config/systemd/user"
+      echo "Installing user service to $TARGET_HOME/.config/systemd/user/gitdock.service for user $TARGET_USER..."
+      mkdir -p "$TARGET_HOME/.config/systemd/user"
       # Find a user service unit in common locations, else write a minimal unit
       # Prefer unit shipped with this source tree (repo) so user installs point
       # to the repository's server.js/working dir. Fall back to system-installed
@@ -158,17 +170,17 @@ EOF
           SRC_USER="$c"; break
         fi
       done
-      if [ -n "$SRC_USER" ]; then
-        if [ "$EXPLICIT_LOCAL" = true ] && [ -n "$REPO_ROOT" ]; then
-          # Only rewrite the unit to point at the checkout when the user asked
-          # for a local install (explicit --local). Default installs should
-          # continue to target /opt/gitdock so they remain stable.
-          sed "s|/opt/gitdock|$REPO_ROOT|g" "$SRC_USER" > "$HOME/.config/systemd/user/gitdock.service"
-        else
-          # Copy the unit as-is (installed helper or default packaged install).
-          cp "$SRC_USER" "$HOME/.config/systemd/user/gitdock.service"
-        fi
-      else
+       if [ -n "$SRC_USER" ]; then
+         if [ "$EXPLICIT_LOCAL" = true ] && [ -n "$REPO_ROOT" ]; then
+           # Only rewrite the unit to point at the checkout when the user asked
+           # for a local install (explicit --local). Default installs should
+           # continue to target /opt/gitdock so they remain stable.
+           sed "s|/opt/gitdock|$REPO_ROOT|g" "$SRC_USER" > "$TARGET_HOME/.config/systemd/user/gitdock.service"
+         else
+           # Copy the unit as-is (installed helper or default packaged install).
+           cp "$SRC_USER" "$TARGET_HOME/.config/systemd/user/gitdock.service"
+         fi
+       else
         # Fallback: write a minimal user service unit directly. Point at
         # REPO_ROOT when present, otherwise default to /opt/gitdock.
         # Only use the repo checkout as the target when explicit local flag is
@@ -179,7 +191,7 @@ EOF
         else
           TARGET_ROOT="/opt/gitdock"
         fi
-        cat > "$HOME/.config/systemd/user/gitdock.service" <<EOF
+        cat > "$TARGET_HOME/.config/systemd/user/gitdock.service" <<EOF
 [Unit]
 Description=GitDock - Multi-Account GitHub/GitLab Manager (User Service)
 After=network-online.target
@@ -200,13 +212,13 @@ StandardError=journal
 [Install]
 WantedBy=default.target
 EOF
-      fi
+       fi
       # If we detected a repository checkout and rewrote the unit to point at
-      # it, ensure the user's workspace.json defaults to that repo so the
-      # running service picks the repository path instead of /opt/gitdock.
+      # it, ensure the target user's workspace.json defaults to that repo so
+      # the running service picks the repository path instead of /opt/gitdock.
       if [ -n "$REPO_ROOT" ]; then
-        mkdir -p "$HOME/.gitdock"
-        WORKSPACE_FILE="$HOME/.gitdock/workspace.json"
+        mkdir -p "$TARGET_HOME/.gitdock"
+        WORKSPACE_FILE="$TARGET_HOME/.gitdock/workspace.json"
         if [ ! -f "$WORKSPACE_FILE" ]; then
           cat > "$WORKSPACE_FILE" <<EOF
 {
@@ -219,6 +231,7 @@ EOF
   "active": "Default"
 }
 EOF
+          chown "$TARGET_USER":"$TARGET_USER" "$WORKSPACE_FILE"
         else
           # Only replace the conventional /opt/gitdock path; don't clobber a
           # user's custom workspaces. This keeps the change conservative.
@@ -227,18 +240,22 @@ EOF
           fi
         fi
       fi
-      chmod 644 "$HOME/.config/systemd/user/gitdock.service"
-      systemctl --user daemon-reload
-      systemctl --user enable --now gitdock
+      chmod 644 "$TARGET_HOME/.config/systemd/user/gitdock.service"
+      chown "$TARGET_USER":"$TARGET_USER" "$TARGET_HOME/.config/systemd/user/gitdock.service"
+
+      # Reload & enable the user service as the target user. Ensure linger is enabled so
+      # the service can run without an active login session.
+      echo "Enabling linger for $TARGET_USER so the user service can run without login (requires sudo)"
+      sudo loginctl enable-linger "$TARGET_USER" || echo "Could not enable linger; service will require login to start on boot"
+
+      su - "$TARGET_USER" -c 'systemctl --user daemon-reload || true; systemctl --user enable --now gitdock || true'
       # health check for user service
       sleep 1
-      if systemctl --user is-active --quiet gitdock; then
-        echo "User service installed and running. Check: systemctl --user status gitdock"
+      if su - "$TARGET_USER" -c 'systemctl --user is-active --quiet gitdock'; then
+        echo "User service installed and running for $TARGET_USER. Check: su - $TARGET_USER -c 'systemctl --user status gitdock'"
       else
-        echo "User service installed but failed to start. Check journal: journalctl --user -u gitdock -n 200"
+        echo "User service installed but failed to start for $TARGET_USER. Check journal: sudo journalctl --user -u gitdock -n 200 --output=short --user=$TARGET_USER || su - $TARGET_USER -c 'journalctl --user -u gitdock -n 200'"
       fi
-      echo "Enabling linger so service can start at boot without login..."
-      sudo loginctl enable-linger "$USER" || echo "Could not enable linger (requires sudo); service will require login to start on boot"
     fi
     ;;
 

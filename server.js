@@ -1735,6 +1735,8 @@ app.post("/api/accounts/:name/setup-ssh", (req, res) => {
     const providerLabel = providerRouting.getProviderDisplayName(account.provider);
     const comment = `${login}@${account.provider === "gitlab" ? "gitlab" : "github"}-${name}`;
 
+    const writeConfig = req.body && req.body.writeConfig === true;
+
     if (!fs.existsSync(keyFile)) {
       execFileSync(
         "ssh-keygen",
@@ -1743,12 +1745,16 @@ app.post("/api/accounts/:name/setup-ssh", (req, res) => {
       );
     }
 
-    writeSSHConfigBlock(getAccounts());
-    ensureProviderKnownHosts(account.provider || "github");
+    // Only modify ~/.ssh/config or known_hosts when explicitly requested by the client.
+    // This prevents silently overwriting a user's SSH config during a mere key-generation check.
+    if (writeConfig) {
+      writeSSHConfigBlock(getAccounts());
+      ensureProviderKnownHosts(account.provider || "github");
+    }
 
     const pubPath = `${keyFile}.pub`;
     const publicKey = fs.existsSync(pubPath) ? fs.readFileSync(pubPath, "utf8").trim() : "";
-    return res.json({ ok: true, publicKey });
+    return res.json({ ok: true, publicKey, configWritten: !!writeConfig });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
@@ -1769,6 +1775,118 @@ app.get("/api/accounts/:name/ssh/public-key", (req, res) => {
     const publicKey = fs.readFileSync(pubPath, "utf8").trim();
     res.set("Cache-Control", "no-store, no-cache, must-revalidate");
     return res.json({ ok: true, exists: !!publicKey, publicKey });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- GET /api/accounts/:name/ssh/detect - Scan ~/.ssh/config for a Host/IdentityFile matching this account (no changes) ---
+app.get("/api/accounts/:name/ssh/detect", (req, res) => {
+  try {
+    const name = sanitizeAccountName(req.params.name);
+    if (!name) return res.status(400).json({ ok: false, error: "Invalid account name" });
+    const account = validateAccount(name);
+    if (!account) return res.status(404).json({ ok: false, error: "Account not found" });
+
+    const sshDir = getSSHDir();
+    const sshConfigPath = path.join(sshDir, "config");
+    if (!fs.existsSync(sshConfigPath)) return res.json({ ok: true, found: false });
+
+    const content = fs.readFileSync(sshConfigPath, "utf8");
+    const lines = content.split(/\r?\n/);
+    let inHost = false;
+    let currentHosts = [];
+    let found = null;
+    const keyBasename = `id_ed25519_${name}`;
+
+    for (const rawLine of lines) {
+      const line = String(rawLine || "").trim();
+      if (!line) continue;
+      const hostMatch = line.match(/^Host\s+(.+)$/i);
+      if (hostMatch) {
+        currentHosts = hostMatch[1].trim().split(/\s+/).filter(Boolean);
+        inHost = true;
+        continue;
+      }
+      if (!inHost) continue;
+      const idMatch = line.match(/^IdentityFile\s+(.+)$/i);
+      if (idMatch) {
+        const val = idMatch[1].trim();
+        const normVal = val.replace(/\\/g, "/");
+        if (normVal.includes(keyBasename) || fs.existsSync(normVal) || fs.existsSync(path.join(sshDir, normVal))) {
+          if (currentHosts.length > 0) {
+            found = { host: currentHosts[0], identityFile: normVal };
+            break;
+          }
+        }
+      }
+    }
+
+    if (!found) return res.json({ ok: true, found: false });
+    return res.json({ ok: true, found: true, sshHost: found.host, identityFile: found.identityFile });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- POST /api/accounts/:name/ssh/use-existing - Detect and adopt existing SSH Host block for this account ---
+app.post("/api/accounts/:name/ssh/use-existing", (req, res) => {
+  try {
+    const name = sanitizeAccountName(req.params.name);
+    if (!name) return res.status(400).json({ ok: false, error: "Invalid account name" });
+    const account = validateAccount(name);
+    if (!account) return res.status(404).json({ ok: false, error: "Account not found" });
+
+    const sshDir = getSSHDir();
+    const sshConfigPath = path.join(sshDir, "config");
+    if (!fs.existsSync(sshConfigPath)) return res.json({ ok: false, error: "No SSH config file found" });
+
+    const content = fs.readFileSync(sshConfigPath, "utf8");
+    const lines = content.split(/\r?\n/);
+    let inHost = false;
+    let currentHosts = [];
+    let found = null;
+    const keyBasename = `id_ed25519_${name}`;
+
+    for (const rawLine of lines) {
+      const line = String(rawLine || "").trim();
+      if (!line) continue;
+      const hostMatch = line.match(/^Host\s+(.+)$/i);
+      if (hostMatch) {
+        currentHosts = hostMatch[1].trim().split(/\s+/).filter(Boolean);
+        inHost = true;
+        continue;
+      }
+      if (!inHost) continue;
+      const idMatch = line.match(/^IdentityFile\s+(.+)$/i);
+      if (idMatch) {
+        const val = idMatch[1].trim();
+        const normVal = val.replace(/\\/g, "/");
+        // If identity file references our expected key basename or the file exists, prefer it
+        if (normVal.includes(keyBasename) || fs.existsSync(normVal) || fs.existsSync(path.join(sshDir, normVal))) {
+          // pick first host in currentHosts
+          if (currentHosts.length > 0) {
+            found = { host: currentHosts[0], identityFile: normVal };
+            break;
+          }
+        }
+      }
+      // Host blocks end when a new Host line is found; handled above
+    }
+
+    if (!found) return res.json({ ok: false, error: "No matching Host/IdentityFile found in SSH config" });
+
+    // Persist choice in config.json under account.sshHost
+    try {
+      const cfg = loadConfig();
+      if (!cfg.accounts || !cfg.accounts[name]) return res.status(404).json({ ok: false, error: "Account not in config" });
+      cfg.accounts[name].sshHost = found.host;
+      saveConfig(cfg);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: "Failed to save config: " + e.message });
+    }
+
+    return res.json({ ok: true, used: true, sshHost: found.host, identityFile: found.identityFile });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });
   }

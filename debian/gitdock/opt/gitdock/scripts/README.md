@@ -14,3 +14,11 @@ Installation recommendation:
 - The project ships scripts/gitdockctrl. The package installs this helper to
   /usr/local/bin so admins can run it directly after installation. It will be
   removed on package purge.
+
+Usage notes:
+ - Normal installs: `gitdockctrl install` — installs a user unit that points
+   at the packaged binary under /opt/gitdock (the permanent install location).
+ - Development: to install a unit that runs the local checkout (useful while
+   developing), run: `gitdockctrl install --local` from the repo checkout. This
+   is intentionally opt-in so packaged installs do not accidentally point at
+   transient repo paths.
