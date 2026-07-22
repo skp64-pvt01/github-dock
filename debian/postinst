@@ -35,7 +35,7 @@ case "$1" in
     #   sudo systemctl enable --now gitdock
     # Or use the provided helper script (after installing the package):
     #   /usr/local/bin/gitdockctrl install  # run as root to install system unit
-    # The helper is installed to /usr/local/bin by the package (dh_install).
+    # The helper is installed to /usr/bin by the package (dh_install).
 
     # If /usr/local/bin/gitdockctrl exists, ensure it is executable
     if [ -f /usr/local/bin/gitdockctrl ]; then

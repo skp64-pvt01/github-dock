@@ -20,4 +20,4 @@ hub/           opt/gitdock/
 site/          opt/gitdock/
 test/          opt/gitdock/
 scripts/       opt/gitdock/
-scripts/gitdockctrl usr/local/bin/
+scripts/gitdockctrl usr/bin/

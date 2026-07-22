@@ -9,9 +9,9 @@ case "$1" in
     if getent passwd gitdock >/dev/null 2>&1; then
       userdel -r gitdock 2>/dev/null || true
     fi
-    # Remove helper if installed to /usr/local/bin by package
-    if [ -f /usr/local/bin/gitdockctrl ]; then
-      rm -f /usr/local/bin/gitdockctrl 2>/dev/null || true
+    # Remove helper if installed to /usr/bin by package
+    if [ -f /usr/bin/gitdockctrl ]; then
+      rm -f /usr/bin/gitdockctrl 2>/dev/null || true
     fi
     ;;
 esac
