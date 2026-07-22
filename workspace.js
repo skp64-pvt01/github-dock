@@ -15,6 +15,15 @@ function getDefaultWorkspacePath() {
   return path.join(os.homedir(), "GitDock");
 }
 
+// Expand leading ~ to the current user's home directory
+function expandHome(dirPath) {
+  if (!dirPath || typeof dirPath !== 'string') return dirPath;
+  if (/^~(?=$|[\/])/.test(dirPath)) {
+    return dirPath.replace(/^~(?=$|[\/])/, os.homedir());
+  }
+  return dirPath;
+}
+
 function loadData() {
   try {
     if (fs.existsSync(WORKSPACE_PATH)) {
@@ -51,7 +60,7 @@ function activateWorkspace(name) {
 }
 
 function addWorkspace(name, dirPath) {
-  const resolved = path.resolve(dirPath.trim());
+  const resolved = path.resolve(expandHome(dirPath.trim()));
   if (!fs.existsSync(resolved)) {
     fs.mkdirSync(resolved, { recursive: true });
   }
@@ -96,7 +105,7 @@ function isWorkspaceConfigured() {
 }
 
 function saveWorkspace(dirPath) {
-  const resolved = path.resolve(dirPath.trim());
+  const resolved = path.resolve(expandHome(dirPath.trim()));
   if (!fs.existsSync(resolved)) {
     fs.mkdirSync(resolved, { recursive: true });
   }
@@ -120,7 +129,7 @@ function saveWorkspace(dirPath) {
 }
 
 function probePath(dirPath) {
-  const resolved = path.resolve(dirPath);
+  const resolved = path.resolve(expandHome(dirPath));
   const result = { hasConfig: false, accounts: [], repos: [] };
 
   const configPath = path.join(resolved, "config.json");
