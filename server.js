@@ -2450,36 +2450,68 @@ app.post("/api/repos/transfer", async (req, res) => {
   });
 });
 
-// --- POST /api/open-folder - Open folder in file manager ---
-app.post("/api/open-folder", (req, res) => {
-  const { path: targetPath } = req.body;
+// --- GET /api/browse - Directory listing in browser (served over HTTP to avoid file:// restrictions) ---
+function escHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+app.get("/api/browse", (req, res) => {
+  const targetPath = req.query.path;
   if (!targetPath || typeof targetPath !== "string") {
-    return res.status(400).json({ success: false, error: "Invalid path" });
+    return res.status(400).send("Missing path");
   }
   const norm = path.normalize(targetPath);
   if (!isPathInsideDir(BASE_DIR, norm)) {
-    return res.status(403).json({ success: false, error: "Path not allowed" });
+    return res.status(403).send("Path not allowed");
   }
   if (!fs.existsSync(norm)) {
-    return res.status(404).json({ success: false, error: "Path not found" });
+    return res.status(404).send("Path not found");
   }
-  try {
-    let child;
-    if (isWindows) {
-      child = spawn("explorer", [norm], { detached: true, stdio: "ignore" });
-    } else if (isDarwin) {
-      child = spawn("open", [norm], { detached: true, stdio: "ignore" });
+  if (!fs.statSync(norm).isDirectory()) {
+    return res.status(400).send("Not a directory");
+  }
+  const entries = fs.readdirSync(norm, { withFileTypes: true });
+  const parentPath = path.dirname(norm);
+
+  let html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>" + escHtml(path.basename(norm)) + "</title>";
+  html += "<style>body{font-family:sans-serif;margin:2em;background:#0d1117;color:#c9d1d9}a{color:#58a6ff;text-decoration:none}a:hover{text-decoration:underline}ul{list-style:none;padding:0}li{padding:4px 0}.dir{font-weight:bold}.size{color:#8b949e;margin-left:1em;font-size:0.9em}h1{font-size:1.3em}.back{margin-bottom:1em}</style></head><body>";
+  html += "<h1>" + escHtml(path.basename(norm)) + "</h1>";
+  if (isPathInsideDir(BASE_DIR, parentPath)) {
+    html += "<p class=\"back\"><a href=\"" + escHtml("/api/browse?path=" + encodeURIComponent(parentPath)) + "\">.. (parent)</a></p>";
+  }
+  html += "<ul>";
+  for (const entry of entries) {
+    const name = entry.name;
+    const fullPath = path.join(norm, name);
+    if (entry.isDirectory()) {
+      html += "<li class=\"dir\"><a href=\"" + escHtml("/api/browse?path=" + encodeURIComponent(fullPath)) + "\">" + escHtml(name) + "/</a></li>";
     } else {
-      child = spawn("xdg-open", [norm], { detached: true, stdio: "ignore" });
+      try {
+        const stat = fs.statSync(fullPath);
+        const sizeStr = stat.size >= 1024 ? Math.round(stat.size / 1024) + " KB" : stat.size + " B";
+        html += "<li><a href=\"" + escHtml("/api/browse/raw?path=" + encodeURIComponent(fullPath)) + "\">" + escHtml(name) + "</a> <span class=\"size\">" + sizeStr + "</span></li>";
+      } catch (_) {
+        html += "<li>" + escHtml(name) + " <span class=\"size\">[error]</span></li>";
+      }
     }
-    child.on("error", (err) => {
-      console.error(`[open-folder] Failed to launch file manager: ${err.message}`);
-    });
-    child.unref();
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
   }
+  html += "</ul></body></html>";
+  res.send(html);
+});
+
+app.get("/api/browse/raw", (req, res) => {
+  const targetPath = req.query.path;
+  if (!targetPath || typeof targetPath !== "string") {
+    return res.status(400).send("Missing path");
+  }
+  const norm = path.normalize(targetPath);
+  if (!isPathInsideDir(BASE_DIR, norm)) {
+    return res.status(403).send("Path not allowed");
+  }
+  if (!fs.existsSync(norm)) {
+    return res.status(404).send("Path not found");
+  }
+  res.sendFile(norm);
 });
 
 // --- POST /api/open-editor - Open editor in new window at path ---

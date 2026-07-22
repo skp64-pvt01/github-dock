@@ -2077,13 +2077,9 @@ function openEditorNewWindow(btn) {
   }).catch(function() { toast('Failed to open ' + editor, 'error'); });
 }
 
-function openFolder(btn) {
-  var p = btn && btn.getAttribute && btn.getAttribute('data-path');
-  if (!p) return;
-  apiPost('/open-folder', { path: p }).then(function(data) {
-    if (data.success) toast('Folder opened in file manager', 'success');
-    else toast('Failed to open folder: ' + (data.error || ''), 'error');
-  }).catch(function() { toast('Failed to open folder', 'error'); });
+function pathToFileUri(path) {
+  if (!path) return '#';
+  return '/api/browse?path=' + encodeURIComponent(path);
 }
 
 function openTerminal(btn) {
@@ -3435,6 +3431,7 @@ function tableRowHTML(r) {
   var provider = r.provider || 'github';
   var providerBadge = '<span class="badge b-provider-' + provider + '">' + (provider === 'gitlab' ? 'GitLab' : 'GitHub') + '</span>';
   var upd = r.isCloned && r.lastCommit && r.lastCommit.timeAgo ? r.lastCommit.timeAgo : timeAgo(r.updatedAt);
+  var fileUriTable = r.localPath ? escAttr(pathToFileUri(r.localPath)) : '';
   var actions = '';
   if (r.isCloned) {
     actions = '<button class="btn btn-sm" onclick="openFocusView(\''+a+'\',\''+n+'\')">Details</button>'+
@@ -3442,7 +3439,7 @@ function tableRowHTML(r) {
       '<button class="btn btn-sm" onclick="askConfirmAction(\'pull\',\''+a+'\',\''+n+'\')">Pull</button>'+
       '<button class="btn btn-sm" onclick="askConfirmAction(\'fetch\',\''+a+'\',\''+n+'\')">Fetch</button>'+
       '<button class="btn btn-sm" onclick="askTransfer(\''+a+'\',\''+n+'\',\''+u+'\')">Transfer</button>'+
-      (r.localPath ? '<button class="btn btn-sm" data-path="'+escAttr(r.localPath)+'" onclick="openFolder(this);">Open</button>' : '');
+      (r.localPath ? '<a class="btn btn-sm" href="'+fileUriTable+'" target="_blank">Open</a>' : '');
   } else {
     actions = '<button class="btn btn-sm" onclick="openFocusView(\''+a+'\',\''+n+'\')">Details</button>'+
       '<button class="btn btn-sm btn-primary" onclick="doClone(\''+a+'\',\''+n+'\')">Clone</button>'+
@@ -3483,15 +3480,16 @@ function cardHTML(r) {
   if(r.isCloned){
     var cursorUri = r.localPath ? escAttr(pathToEditorUri(r.localPath,'cursor')) : '';
     var vscodeUri = r.localPath ? escAttr(pathToEditorUri(r.localPath,'vscode')) : '';
+    var fileUri = r.localPath ? escAttr(pathToFileUri(r.localPath)) : '';
     var pathAttr = r.localPath ? escAttr(r.localPath) : '';
-    var cardMenu = r.localPath ? '<div class="card-menu-wrap"><button type="button" class="btn-dots" onclick="toggleCardMenu(this); event.stopPropagation();" title="More actions">&#8942;</button><div class="card-menu"><a href="'+cursorUri+'">Cursor</a><button type="button" data-path="'+pathAttr+'" data-editor="cursor" onclick="openEditorNewWindow(this); event.stopPropagation();">Cursor (new window)</button><a href="'+vscodeUri+'">VS Code</a><button type="button" data-path="'+pathAttr+'" data-editor="code" onclick="openEditorNewWindow(this); event.stopPropagation();">VS Code (new window)</button><button type="button" data-path="'+pathAttr+'" onclick="openTerminal(this); event.stopPropagation();">Terminal</button><button type="button" data-path="'+pathAttr+'" onclick="openFolder(this); event.stopPropagation();">Open Folder</button><div class="card-menu-sep"></div><button type="button" data-path="'+pathAttr+'" onclick="copyRepoPathFromMenu(this); event.stopPropagation();">Copy path</button><button type="button" data-account="'+a+'" data-name="'+n+'" onclick="setAliasFromMenu(this); event.stopPropagation();">Set alias</button><div class="card-menu-sep"></div><button type="button" class="card-menu-remove" data-account="'+a+'" data-name="'+n+'" onclick="askRemoveFromMenu(this); event.stopPropagation();">Remove</button></div></div>' : '';
+    var cardMenu = r.localPath ? '<div class="card-menu-wrap"><button type="button" class="btn-dots" onclick="toggleCardMenu(this); event.stopPropagation();" title="More actions">&#8942;</button><div class="card-menu"><a href="'+cursorUri+'">Cursor</a><button type="button" data-path="'+pathAttr+'" data-editor="cursor" onclick="openEditorNewWindow(this); event.stopPropagation();">Cursor (new window)</button><a href="'+vscodeUri+'">VS Code</a><button type="button" data-path="'+pathAttr+'" data-editor="code" onclick="openEditorNewWindow(this); event.stopPropagation();">VS Code (new window)</button><button type="button" data-path="'+pathAttr+'" onclick="openTerminal(this); event.stopPropagation();">Terminal</button><a href="'+fileUri+'" target="_blank" onclick="event.stopPropagation();">Open Folder</a><div class="card-menu-sep"></div><button type="button" data-path="'+pathAttr+'" onclick="copyRepoPathFromMenu(this); event.stopPropagation();">Copy path</button><button type="button" data-account="'+a+'" data-name="'+n+'" onclick="setAliasFromMenu(this); event.stopPropagation();">Set alias</button><div class="card-menu-sep"></div><button type="button" class="card-menu-remove" data-account="'+a+'" data-name="'+n+'" onclick="askRemoveFromMenu(this); event.stopPropagation();">Remove</button></div></div>' : '';
     acts='<div class="card-actions">'+
       '<button class="btn btn-sm" onclick="openFocusView(\''+a+'\',\''+n+'\')">Details</button>'+
       '<button class="btn btn-sm" onclick="openGitModal(\''+a+'\',\''+n+'\')">Git</button>'+
       '<button class="btn btn-sm" onclick="askConfirmAction(\'pull\',\''+a+'\',\''+n+'\')">Pull</button>'+
       '<button class="btn btn-sm" onclick="askConfirmAction(\'fetch\',\''+a+'\',\''+n+'\')">Fetch</button>'+
       '<button class="btn btn-sm" onclick="askTransfer(\''+a+'\',\''+n+'\',\''+u+'\')">Transfer</button>'+
-      (r.localPath ? '<button class="btn btn-sm" data-path="'+escAttr(r.localPath)+'" onclick="openFolder(this); event.stopPropagation();">Open</button>' : '')+
+      (r.localPath ? '<a class="btn btn-sm" href="'+fileUri+'" target="_blank" onclick="event.stopPropagation();">Open</a>' : '')+
     '</div>';
   } else {
     acts='<div class="card-actions">'+
