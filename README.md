@@ -203,6 +203,46 @@ brew install gh
 # SSH is already installed on macOS
 ```
 
+## Installation & Service Management
+
+GitDock is distributed as a .deb package that installs into /opt/gitdock.
+By default the package will NOT enable or start a system-wide systemd unit.
+This avoids surprising administrators on multi-user machines. Instead the
+package ships a small helper binary installed to /usr/local/bin/gitdockctrl
+that simplifies installing and managing the service in either per-user or
+system scope.
+
+Usage examples (recommended):
+
+- Install and run as the current user (no sudo, recommended for single-user
+  desktops/servers where GitDock manages user home paths):
+
+  gitdockctrl install
+
+- Install and run as a system service (requires sudo / root):
+
+  sudo gitdockctrl install
+
+- Start/stop/status (helper chooses scope by whether you run it under sudo):
+
+  gitdockctrl status        # as normal user => checks per-user service
+  sudo gitdockctrl status   # as root => checks system service
+  gitdockctrl log           # follow journal (user or system depending on scope)
+
+Notes:
+- The helper decides scope automatically: run it as root (or via sudo) to
+  operate on the system unit, run it as a normal user to operate on the
+  per-user systemd unit (systemctl --user). You may pass --system to the
+  install command as a non-root user to request a system install; running as
+  root makes that implicit.
+- If you prefer to enable the system unit manually, run:
+
+  sudo systemctl enable --now gitdock
+
+The helper performs basic health checks after operations and prints useful
+diagnostic hints (journal commands) when start/restart fail.
+
+
 #### Linux (Ubuntu/Debian)
 
 ```bash

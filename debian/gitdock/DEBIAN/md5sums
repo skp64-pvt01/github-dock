@@ -36,7 +36,7 @@ a4bc51158c19d142eefc5c63b13cff08  opt/gitdock/scripts/publish-v1.2.0.ps1
 052e9b96010b946b078551003285805c  opt/gitdock/scripts/release-v1.2.0-notes.md
 34fbf46fd49b21463915e033a612195e  opt/gitdock/scripts/release-v1.2.0-pr-body.md
 97fb9dbcf9f02bdbce79226dc1935957  opt/gitdock/sea-config.json
-39ca1c8df857bd338cc760671da9959e  opt/gitdock/server.js
+52bbd1602c9585697b6f962c53ed38fc  opt/gitdock/server.js
 d0e7d3961aff31ea4491b8328fed0b5f  opt/gitdock/site/css/common.css
 13ae0df477731a2e2a028e62c3cf4ba5  opt/gitdock/site/css/index.css
 e88e8fc3227d177b8c517ccce89647da  opt/gitdock/site/dashboard.png

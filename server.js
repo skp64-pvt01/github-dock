@@ -278,11 +278,8 @@ function validateDirPath(dirPath) {
   }
   const resolved = path.resolve(dirPath.trim());
   if (process.env.GITDOCK_TEST !== "1") {
-    if (!isPathInsideDir(os.homedir(), resolved)) {
-      return "Workspace must be within your home directory";
-    }
-    if (resolved === path.parse(resolved).root || resolved === os.homedir()) {
-      return "Workspace cannot be a root directory or your home folder directly";
+    if (resolved === path.parse(resolved).root) {
+      return "Workspace cannot be the root directory";
     }
   }
   return null;

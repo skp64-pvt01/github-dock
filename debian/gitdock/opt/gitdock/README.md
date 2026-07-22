@@ -281,6 +281,32 @@ node server.js
 
 Open your browser at **http://127.0.0.1:3847** (or the next available port if `3847` is in use).
 
+## Service Management
+
+If you installed GitDock via the provided .deb package, files are placed under
+/opt/gitdock but the package intentionally does not enable or start the system
+service by default. This prevents surprising administrators on multi-user
+systems. A small helper utility is installed to /usr/local/bin/gitdockctrl to
+make service management simple.
+
+Examples:
+
+  # Install and run as the current user (recommended)
+  gitdockctrl install
+
+  # Install and run as a system service (requires sudo/root)
+  sudo gitdockctrl install
+
+  # Check status (scope chosen by whether you run it as root)
+  gitdockctrl status
+
+  # Follow logs
+  gitdockctrl log
+
+The helper performs basic health checks after install/start/restart and prints
+diagnostic hints (journalctl commands) if something fails.
+
+
 ### 3. Add your account
 
 The dashboard shows an empty state: **"No repositories yet. Add an account to get started."**

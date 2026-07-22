@@ -60,9 +60,9 @@
     "semantic_hash": "97fb9dbcf9f02bdbce79226dc1935957"
   },
   "server.js": {
-    "mtime": 1784706223.8213215,
-    "ast_hash": "a7597fcbdb565ce4a5e59013834ba298",
-    "semantic_hash": "a7597fcbdb565ce4a5e59013834ba298"
+    "mtime": 1784718079.9730172,
+    "ast_hash": "52bbd1602c9585697b6f962c53ed38fc",
+    "semantic_hash": ""
   },
   "site/js/common.js": {
     "mtime": 1784228451.5363576,
@@ -135,13 +135,13 @@
     "semantic_hash": "9b51d32abb7dbacfc83b053d074e1b08"
   },
   "AGENTS.md": {
-    "mtime": 1784232714.8455105,
-    "ast_hash": "a2357d82accd2b0c371c5af09f3575ca",
+    "mtime": 1784711306.8719897,
+    "ast_hash": "afc762ddcdc0bb671931ac5368e919f5",
     "semantic_hash": ""
   },
   "CHANGELOG.md": {
-    "mtime": 1784233414.0043142,
-    "ast_hash": "de0735f676aec214112c1ea0589d7d34",
+    "mtime": 1784712152.4830089,
+    "ast_hash": "17d0129d779b4263b6e9c6b70b444dac",
     "semantic_hash": ""
   },
   "CONTRIBUTING.md": {
@@ -155,9 +155,9 @@
     "semantic_hash": "ae75f6ae1f0bd65ba244833b4d7d200c"
   },
   "dashboard.html": {
-    "mtime": 1784705989.112882,
-    "ast_hash": "0337603978ed2f4101269c4f380f997b",
-    "semantic_hash": "0337603978ed2f4101269c4f380f997b"
+    "mtime": 1784714318.9392943,
+    "ast_hash": "7989521b62b023b2868d41a92cbc918c",
+    "semantic_hash": ""
   },
   "hub/README.md": {
     "mtime": 1784233417.8435547,
@@ -300,17 +300,17 @@
     "semantic_hash": "602427567c99c1da409d6456b32b011f"
   },
   "debian/gitdock/DEBIAN/postinst": {
-    "mtime": 1784267354.6782346,
+    "mtime": 1784718367.3489382,
     "ast_hash": "d24301356dac9e8da53324460d033e10",
     "semantic_hash": "d24301356dac9e8da53324460d033e10"
   },
   "debian/gitdock/DEBIAN/postrm": {
-    "mtime": 1784267354.6783333,
+    "mtime": 1784718367.3490503,
     "ast_hash": "90c4a158dad3b181463363f05fa2ddc5",
     "semantic_hash": "90c4a158dad3b181463363f05fa2ddc5"
   },
   "debian/gitdock/DEBIAN/prerm": {
-    "mtime": 1784267354.6782897,
+    "mtime": 1784718367.3490026,
     "ast_hash": "9515aa359e1c52631366d6262ffd0b7e",
     "semantic_hash": "9515aa359e1c52631366d6262ffd0b7e"
   },
@@ -400,9 +400,9 @@
     "semantic_hash": "97fb9dbcf9f02bdbce79226dc1935957"
   },
   "debian/gitdock/opt/gitdock/server.js": {
-    "mtime": 1784266406.3857558,
-    "ast_hash": "dc34805b84490ee1b8e923ec4b501a61",
-    "semantic_hash": "dc34805b84490ee1b8e923ec4b501a61"
+    "mtime": 1784718079.9730172,
+    "ast_hash": "52bbd1602c9585697b6f962c53ed38fc",
+    "semantic_hash": ""
   },
   "debian/gitdock/opt/gitdock/site/js/common.js": {
     "mtime": 1784228451.5363576,
@@ -465,9 +465,9 @@
     "semantic_hash": "d6977709ec89dee47f7057a6c2a0cf4f"
   },
   "debian/gitdock/opt/gitdock/workspace.js": {
-    "mtime": 1784228451.5442774,
-    "ast_hash": "d3203f56d4b8dd7fa22952e682aac4f6",
-    "semantic_hash": "d3203f56d4b8dd7fa22952e682aac4f6"
+    "mtime": 1784706154.7240703,
+    "ast_hash": "9918eb09f6f1e1bc577836a892f2afa2",
+    "semantic_hash": ""
   },
   "debian/postinst": {
     "mtime": 1784231258.7082555,
@@ -540,14 +540,14 @@
     "semantic_hash": "5e28741fa4f80cb99e5e9ab70c92d6eb"
   },
   "debian/gitdock/opt/gitdock/AGENTS.md": {
-    "mtime": 1784232714.8455105,
-    "ast_hash": "a2357d82accd2b0c371c5af09f3575ca",
-    "semantic_hash": "a2357d82accd2b0c371c5af09f3575ca"
+    "mtime": 1784711306.8719897,
+    "ast_hash": "afc762ddcdc0bb671931ac5368e919f5",
+    "semantic_hash": ""
   },
   "debian/gitdock/opt/gitdock/CHANGELOG.md": {
-    "mtime": 1784233414.0043142,
-    "ast_hash": "de0735f676aec214112c1ea0589d7d34",
-    "semantic_hash": "de0735f676aec214112c1ea0589d7d34"
+    "mtime": 1784712152.4830089,
+    "ast_hash": "17d0129d779b4263b6e9c6b70b444dac",
+    "semantic_hash": ""
   },
   "debian/gitdock/opt/gitdock/CONTRIBUTING.md": {
     "mtime": 1784228451.5290692,
@@ -565,9 +565,9 @@
     "semantic_hash": "ae75f6ae1f0bd65ba244833b4d7d200c"
   },
   "debian/gitdock/opt/gitdock/dashboard.html": {
-    "mtime": 1784232338.0909007,
-    "ast_hash": "1fbfc1c0cd240c3a98a1d016c00396c0",
-    "semantic_hash": "1fbfc1c0cd240c3a98a1d016c00396c0"
+    "mtime": 1784714318.9392943,
+    "ast_hash": "7989521b62b023b2868d41a92cbc918c",
+    "semantic_hash": ""
   },
   "debian/gitdock/opt/gitdock/hub/README.md": {
     "mtime": 1784233417.8435547,
@@ -703,5 +703,20 @@
     "mtime": 1784706243.401526,
     "ast_hash": "e01b90527784778c6c60db1b17bae433",
     "semantic_hash": "e01b90527784778c6c60db1b17bae433"
+  },
+  "debian/gitdock/opt/gitdock/scripts/dev.sh": {
+    "mtime": 1784710269.8367112,
+    "ast_hash": "030c8c926be4c9db9001167878ec5fb3",
+    "semantic_hash": ""
+  },
+  "debian/gitdock/opt/gitdock/test/workspace.test.js": {
+    "mtime": 1784706243.401526,
+    "ast_hash": "e01b90527784778c6c60db1b17bae433",
+    "semantic_hash": ""
+  },
+  "scripts/dev.sh": {
+    "mtime": 1784710269.8367112,
+    "ast_hash": "030c8c926be4c9db9001167878ec5fb3",
+    "semantic_hash": ""
   }
 }

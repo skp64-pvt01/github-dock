@@ -13,6 +13,7 @@ set -euo pipefail
 APP_NAME="gitdock"
 INSTALL_DIR="/opt/gitdock"
 BIN_LINK="/usr/bin/gitdock"
+CTRL_LINK="/usr/local/bin/gitdockctrl"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -189,36 +190,38 @@ fi
 # =============================================================================
 # INSTALL SYSTEMD SERVICE
 # =============================================================================
-if [ "$MODE" = "system" ]; then
-  log "Installing systemd service (system level)..."
-  sudo cp "$SCRIPT_DIR/gitdock.service" /etc/systemd/system/
-  sudo chmod 644 /etc/systemd/system/gitdock.service
-  sudo systemctl daemon-reload
-  sudo systemctl enable gitdock
-  sudo systemctl start gitdock
-  log "GitDock service started. Check: systemctl status gitdock"
+  if [ "$MODE" = "system" ]; then
+    log "Installing systemd service (system level)..."
+    sudo cp "$SCRIPT_DIR/gitdock.service" /etc/systemd/system/
+    sudo chmod 644 /etc/systemd/system/gitdock.service
+    sudo systemctl daemon-reload
+    # Do not enable/start the system service automatically. Use gitdockctrl or
+    # run 'sudo systemctl enable --now gitdock' when ready.
+    log "System unit installed at /etc/systemd/system/gitdock.service"
 
-  # Create convenience symlink
-  if [ ! -f "$BIN_LINK" ]; then
-    echo '#!/bin/bash' | sudo tee "$BIN_LINK" >/dev/null
-    echo 'exec systemctl $1 gitdock' | sudo tee -a "$BIN_LINK" >/dev/null
-    sudo chmod 755 "$BIN_LINK"
-    log "Created $BIN_LINK - run 'gitdock status|start|stop|restart'"
+    # Create convenience symlink for admins
+    if [ ! -f "$BIN_LINK" ]; then
+      echo '#!/bin/bash' | sudo tee "$BIN_LINK" >/dev/null
+      echo 'exec systemctl $1 gitdock' | sudo tee -a "$BIN_LINK" >/dev/null
+      sudo chmod 755 "$BIN_LINK"
+      log "Created $BIN_LINK - run 'gitdock status|start|stop|restart' (requires sudo)"
+    fi
+    # The helper script is installed by the package maintainer via debian/install
+    # to /usr/local/bin. Do not copy at runtime from the install tree.
+  else
+    log "Installing systemd service (user level)..."
+    mkdir -p "$HOME/.config/systemd/user"
+    cp "$SCRIPT_DIR/gitdock.user.service" "$HOME/.config/systemd/user/gitdock.service"
+    chmod 644 "$HOME/.config/systemd/user/gitdock.service"
+    systemctl --user daemon-reload
+    systemctl --user enable gitdock
+    systemctl --user start gitdock
+    log "GitDock user service started. Check: systemctl --user status gitdock"
+
+    # Enable lingering for this user so service starts on boot without login
+    log "Enabling lingering for user $USER (service starts on boot)..."
+    sudo loginctl enable-linger "$USER" 2>/dev/null || warn "Could not enable lingering - user service won't start automatically at boot"
   fi
-else
-  log "Installing systemd service (user level)..."
-  mkdir -p "$HOME/.config/systemd/user"
-  cp "$SCRIPT_DIR/gitdock.user.service" "$HOME/.config/systemd/user/gitdock.service"
-  chmod 644 "$HOME/.config/systemd/user/gitdock.service"
-  systemctl --user daemon-reload
-  systemctl --user enable gitdock
-  systemctl --user start gitdock
-  log "GitDock user service started. Check: systemctl --user status gitdock"
-
-  # Enable lingering for this user so service starts on boot without login
-  log "Enabling lingering for user $USER (service starts on boot)..."
-  sudo loginctl enable-linger "$USER" 2>/dev/null || warn "Could not enable lingering - user service won't start automatically at boot"
-fi
 
 # =============================================================================
 # SUMMARY

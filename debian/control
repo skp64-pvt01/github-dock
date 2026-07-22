@@ -10,13 +10,14 @@ Vcs-Git: https://github.com/gitdock-dev/gitdock.git
 Package: gitdock
 Architecture: all
 Depends: nodejs (>= 18),
-         adduser,
-         ${misc:Depends}
+          adduser,
+          ${misc:Depends}
 Recommends: git (>= 2.30),
             gh
 Suggests: glab,
           curl,
           wget
+Replaces: gitdockctrl
 Description: Local dashboard for managing multiple GitHub (and GitLab) accounts
  GitDock is a web-based utility for managing GitHub and GitLab hosted
  repositories. It provides a local web dashboard that allows users to:
@@ -28,3 +29,7 @@ Description: Local dashboard for managing multiple GitHub (and GitLab) accounts
  .
  GitDock runs as a systemd service on localhost:3847 and is accessible
  only from the local machine.
+ .
+ # NOTE: The package will not enable a systemd system service by default on
+ # installation. Use the included `gitdockctrl` helper to install or enable a
+ # system service explicitly, or run GitDock as a per-user service (recommended).
