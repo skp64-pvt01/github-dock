@@ -80,6 +80,16 @@ const {
 let BASE_DIR = (isPkg || isStandalone) ? (workspaceModule.loadWorkspace() || path.dirname(process.execPath)) : __dirname;
 let CONFIG_PATH = path.join(BASE_DIR, "config.json");
 
+// Auto-init workspace from current BASE_DIR when running from source
+if (!isPkg && !isStandalone && process.env.GITDOCK_TEST !== "1") {
+  const existing = workspaceModule.listWorkspaces().find(w => w.path === BASE_DIR);
+  if (existing) {
+    workspaceModule.activateWorkspace(existing.name);
+  } else {
+    workspaceModule.addWorkspace("Default", BASE_DIR);
+  }
+}
+
 if (process.env.GITDOCK_TEST === "1") {
   const testRoot = process.env.GITDOCK_TEST_ROOT || path.join(os.tmpdir(), `gitdock-test-${process.pid}`);
   BASE_DIR = testRoot;
@@ -291,7 +301,7 @@ app.get("/api/workspace/status", (req, res) => {
   const all = workspace.listWorkspaces();
   res.json({
     configured: !!active,
-    path: active ? active.path : null,
+    path: active ? active.path : BASE_DIR,
     active: active ? { name: active.name, path: active.path } : null,
     workspaces: all.map(w => ({ name: w.name, path: w.path })),
     defaultPath: workspace.getDefaultWorkspacePath(),
@@ -1245,7 +1255,7 @@ app.delete("/api/accounts/:name", async (req, res) => {
       const config = loadConfig();
       delete config.accounts[name];
       saveConfig(config);
-      try { syncManagedSshConfigToAccounts(); } catch (e) { /* ignore */ }
+      syncManagedSshConfigToAccounts();
       return res.json({ ok: true });
     }
     const dirs = fs.readdirSync(account.localDir, { withFileTypes: true });
@@ -1262,7 +1272,7 @@ app.delete("/api/accounts/:name", async (req, res) => {
     const config = loadConfig();
     delete config.accounts[name];
     saveConfig(config);
-    try { syncManagedSshConfigToAccounts(); } catch (e) { /* ignore */ }
+    syncManagedSshConfigToAccounts();
     return res.json({ ok: true });
   } catch (e) {
     return res.status(500).json({ error: e.message });
@@ -1495,6 +1505,18 @@ function ensureSSHDir() {
   return sshDir;
 }
 
+function backupFile(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return;
+    const ts = new Date().toISOString().replace(/[T:]/g, "-").replace(/\..+/, "");
+    const bak = filePath + "." + ts + ".bak";
+    fs.copyFileSync(filePath, bak);
+    console.log("[ssh] Backup created: " + bak);
+  } catch (e) {
+    console.warn("[ssh] Backup failed for " + filePath + ": " + e.message);
+  }
+}
+
 function writeSSHConfigBlock(accounts) {
   const sshDir = getSSHDir();
   const configPath = path.join(sshDir, "config");
@@ -1502,7 +1524,7 @@ function writeSSHConfigBlock(accounts) {
   if (fs.existsSync(configPath)) existing = fs.readFileSync(configPath, "utf8");
   const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-  // Remove all existing managed blocks (both GitHub and GitLab)
+  // Remove only complete managed blocks between matching markers
   const markers = [
     [SSH_MARKER, SSH_MARKER_END],
     [SSH_MARKER_GITLAB, SSH_MARKER_GITLAB_END],
@@ -1516,7 +1538,7 @@ function writeSSHConfigBlock(accounts) {
   // Group accounts by provider
   const githubAccounts = [];
   const gitlabAccounts = [];
-  for (const [accName, acc] of Object.entries(accounts)) {
+  for (const [accName, acc] of Object.entries(accounts || {})) {
     if ((acc.provider || "github") === "gitlab") {
       gitlabAccounts.push([accName, acc]);
     } else {
@@ -1564,7 +1586,24 @@ function writeSSHConfigBlock(accounts) {
   }
 
   const block = blocks.join("\n");
+
+  // Timestamped backup before modifying
+  backupFile(configPath);
+
   fs.writeFileSync(configPath, (cleaned ? cleaned + "\n" : "") + block, "utf8");
+}
+
+function syncManagedSshConfigToAccounts() {
+  try {
+    const accounts = getAccounts();
+    if (!accounts || typeof accounts !== "object") {
+      console.warn("[ssh] No valid accounts — skipping SSH config sync");
+      return;
+    }
+    writeSSHConfigBlock(accounts);
+  } catch (e) {
+    console.error("[ssh] Failed to sync SSH config:", e.message);
+  }
 }
 
 function cleanupOrphanedGitconfigs() {
@@ -1585,12 +1624,6 @@ function cleanupOrphanedGitconfigs() {
         }
       } catch (e) { /* ignore */ }
     }
-  } catch (e) { /* ignore */ }
-}
-
-function syncManagedSshConfigToAccounts() {
-  try {
-    writeSSHConfigBlock(getAccounts());
   } catch (e) { /* ignore */ }
 }
 
@@ -2415,6 +2448,38 @@ app.post("/api/repos/transfer", async (req, res) => {
     message: pendingMsg,
     newUrl: `https://github.com/${dest.githubUser}/${safeName}`,
   });
+});
+
+// --- POST /api/open-folder - Open folder in file manager ---
+app.post("/api/open-folder", (req, res) => {
+  const { path: targetPath } = req.body;
+  if (!targetPath || typeof targetPath !== "string") {
+    return res.status(400).json({ success: false, error: "Invalid path" });
+  }
+  const norm = path.normalize(targetPath);
+  if (!isPathInsideDir(BASE_DIR, norm)) {
+    return res.status(403).json({ success: false, error: "Path not allowed" });
+  }
+  if (!fs.existsSync(norm)) {
+    return res.status(404).json({ success: false, error: "Path not found" });
+  }
+  try {
+    let child;
+    if (isWindows) {
+      child = spawn("explorer", [norm], { detached: true, stdio: "ignore" });
+    } else if (isDarwin) {
+      child = spawn("open", [norm], { detached: true, stdio: "ignore" });
+    } else {
+      child = spawn("xdg-open", [norm], { detached: true, stdio: "ignore" });
+    }
+    child.on("error", (err) => {
+      console.error(`[open-folder] Failed to launch file manager: ${err.message}`);
+    });
+    child.unref();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // --- POST /api/open-editor - Open editor in new window at path ---

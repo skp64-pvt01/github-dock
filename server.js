@@ -2450,6 +2450,38 @@ app.post("/api/repos/transfer", async (req, res) => {
   });
 });
 
+// --- POST /api/open-folder - Open folder in file manager ---
+app.post("/api/open-folder", (req, res) => {
+  const { path: targetPath } = req.body;
+  if (!targetPath || typeof targetPath !== "string") {
+    return res.status(400).json({ success: false, error: "Invalid path" });
+  }
+  const norm = path.normalize(targetPath);
+  if (!isPathInsideDir(BASE_DIR, norm)) {
+    return res.status(403).json({ success: false, error: "Path not allowed" });
+  }
+  if (!fs.existsSync(norm)) {
+    return res.status(404).json({ success: false, error: "Path not found" });
+  }
+  try {
+    let child;
+    if (isWindows) {
+      child = spawn("explorer", [norm], { detached: true, stdio: "ignore" });
+    } else if (isDarwin) {
+      child = spawn("open", [norm], { detached: true, stdio: "ignore" });
+    } else {
+      child = spawn("xdg-open", [norm], { detached: true, stdio: "ignore" });
+    }
+    child.on("error", (err) => {
+      console.error(`[open-folder] Failed to launch file manager: ${err.message}`);
+    });
+    child.unref();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // --- POST /api/open-editor - Open editor in new window at path ---
 app.post("/api/open-editor", (req, res) => {
   const { path: targetPath, editor } = req.body;

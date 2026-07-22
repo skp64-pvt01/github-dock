@@ -43,6 +43,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README header uses `site/gitdock-logo-removebg-preview.png` (transparent logo for GitHub light and dark themes).
 - Account name validation now rejects names that require stripping unsafe characters (e.g. `bad name!`, `work;rm`).
 
+### Fixed
+
+- **Workspace visibility** — main page header now shows active workspace name + path; settings panel shows current base directory path even without a managed workspace.
+- **Workspace auto-init** — server auto-creates/activates a "Default" workspace from `BASE_DIR` when running from source, keeping the workspace system in sync with the actual base directory.
+- **Workspace status API** — `/api/workspace/status` now always returns `path` (BASE_DIR as fallback) instead of `null`.
+
+### Fixed
+
+- **SSH config safety** — `writeSSHConfigBlock()` now creates a timestamped backup (`~/.ssh/config.<timestamp>.bak`) before modifying. Silenced `/* ignore */` replaced with logged warnings. Empty or invalid accounts list no longer silently nukes non-managed entries.
+
 ### Security
 
 - Stricter `sanitizeAccountName` so shell-like input cannot be silently normalized into a valid account id.

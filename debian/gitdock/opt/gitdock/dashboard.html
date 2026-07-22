@@ -1369,6 +1369,10 @@ body {
       <span class="app-title">GitDock</span>
       <span class="app-sub" id="lastUpdated">Connecting...</span>
     </div>
+    <div id="wsIndicator" style="display:none;margin-left:16px;padding-left:16px;border-left:1px solid var(--border);font-size:11px;line-height:1.3">
+      <div id="wsIndicatorName" style="font-weight:600;color:var(--t1)"></div>
+      <div id="wsIndicatorPath" style="font-family:monospace;color:var(--t3);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+    </div>
   </div>
   <div class="app-top-actions">
     <a id="hubLinkBtn" href="#" class="btn btn-sm btn-hub" title="Open Hub (multi-machine overview)" data-configured="false" onclick="if(this.getAttribute('data-configured')!=='true'){event.preventDefault();openHubModal();}">
@@ -2073,6 +2077,15 @@ function openEditorNewWindow(btn) {
   }).catch(function() { toast('Failed to open ' + editor, 'error'); });
 }
 
+function openFolder(btn) {
+  var p = btn && btn.getAttribute && btn.getAttribute('data-path');
+  if (!p) return;
+  apiPost('/open-folder', { path: p }).then(function(data) {
+    if (data.success) toast('Folder opened in file manager', 'success');
+    else toast('Failed to open folder: ' + (data.error || ''), 'error');
+  }).catch(function() { toast('Failed to open folder', 'error'); });
+}
+
 function openTerminal(btn) {
   var p = btn && btn.getAttribute && btn.getAttribute('data-path');
   if (!p) return;
@@ -2145,6 +2158,11 @@ async function loadSettingsData() {
       wh += '<div style="margin-bottom:10px">';
       wh += '<div style="font-size:15px;font-weight:700;color:var(--t1)">' + esc(ws.active.name) + '</div>';
       wh += '<div style="font-size:11px;color:var(--t3);font-family:monospace;word-break:break-all;margin-top:2px">' + esc(ws.active.path) + '</div>';
+      wh += '</div>';
+    } else if (ws.path) {
+      wh += '<div style="margin-bottom:10px">';
+      wh += '<div style="font-size:11px;color:var(--t3)">Current base directory (not managed as workspace)</div>';
+      wh += '<div style="font-size:12px;font-family:monospace;color:var(--t1);word-break:break-all;margin-top:2px">' + esc(ws.path) + '</div>';
       wh += '</div>';
     } else {
       wh += '<div style="margin-bottom:10px;color:var(--t3);font-size:13px">No active workspace</div>';
@@ -3423,7 +3441,8 @@ function tableRowHTML(r) {
       '<button class="btn btn-sm" onclick="openGitModal(\''+a+'\',\''+n+'\')">Git</button>'+
       '<button class="btn btn-sm" onclick="askConfirmAction(\'pull\',\''+a+'\',\''+n+'\')">Pull</button>'+
       '<button class="btn btn-sm" onclick="askConfirmAction(\'fetch\',\''+a+'\',\''+n+'\')">Fetch</button>'+
-      '<button class="btn btn-sm" onclick="askTransfer(\''+a+'\',\''+n+'\',\''+u+'\')">Transfer</button>';
+      '<button class="btn btn-sm" onclick="askTransfer(\''+a+'\',\''+n+'\',\''+u+'\')">Transfer</button>'+
+      (r.localPath ? '<button class="btn btn-sm" data-path="'+escAttr(r.localPath)+'" onclick="openFolder(this);">Open</button>' : '');
   } else {
     actions = '<button class="btn btn-sm" onclick="openFocusView(\''+a+'\',\''+n+'\')">Details</button>'+
       '<button class="btn btn-sm btn-primary" onclick="doClone(\''+a+'\',\''+n+'\')">Clone</button>'+
@@ -3465,13 +3484,14 @@ function cardHTML(r) {
     var cursorUri = r.localPath ? escAttr(pathToEditorUri(r.localPath,'cursor')) : '';
     var vscodeUri = r.localPath ? escAttr(pathToEditorUri(r.localPath,'vscode')) : '';
     var pathAttr = r.localPath ? escAttr(r.localPath) : '';
-    var cardMenu = r.localPath ? '<div class="card-menu-wrap"><button type="button" class="btn-dots" onclick="toggleCardMenu(this); event.stopPropagation();" title="More actions">&#8942;</button><div class="card-menu"><a href="'+cursorUri+'">Cursor</a><button type="button" data-path="'+pathAttr+'" data-editor="cursor" onclick="openEditorNewWindow(this); event.stopPropagation();">Cursor (new window)</button><a href="'+vscodeUri+'">VS Code</a><button type="button" data-path="'+pathAttr+'" data-editor="code" onclick="openEditorNewWindow(this); event.stopPropagation();">VS Code (new window)</button><button type="button" data-path="'+pathAttr+'" onclick="openTerminal(this); event.stopPropagation();">Terminal</button><div class="card-menu-sep"></div><button type="button" data-path="'+pathAttr+'" onclick="copyRepoPathFromMenu(this); event.stopPropagation();">Copy path</button><button type="button" data-account="'+a+'" data-name="'+n+'" onclick="setAliasFromMenu(this); event.stopPropagation();">Set alias</button><div class="card-menu-sep"></div><button type="button" class="card-menu-remove" data-account="'+a+'" data-name="'+n+'" onclick="askRemoveFromMenu(this); event.stopPropagation();">Remove</button></div></div>' : '';
+    var cardMenu = r.localPath ? '<div class="card-menu-wrap"><button type="button" class="btn-dots" onclick="toggleCardMenu(this); event.stopPropagation();" title="More actions">&#8942;</button><div class="card-menu"><a href="'+cursorUri+'">Cursor</a><button type="button" data-path="'+pathAttr+'" data-editor="cursor" onclick="openEditorNewWindow(this); event.stopPropagation();">Cursor (new window)</button><a href="'+vscodeUri+'">VS Code</a><button type="button" data-path="'+pathAttr+'" data-editor="code" onclick="openEditorNewWindow(this); event.stopPropagation();">VS Code (new window)</button><button type="button" data-path="'+pathAttr+'" onclick="openTerminal(this); event.stopPropagation();">Terminal</button><button type="button" data-path="'+pathAttr+'" onclick="openFolder(this); event.stopPropagation();">Open Folder</button><div class="card-menu-sep"></div><button type="button" data-path="'+pathAttr+'" onclick="copyRepoPathFromMenu(this); event.stopPropagation();">Copy path</button><button type="button" data-account="'+a+'" data-name="'+n+'" onclick="setAliasFromMenu(this); event.stopPropagation();">Set alias</button><div class="card-menu-sep"></div><button type="button" class="card-menu-remove" data-account="'+a+'" data-name="'+n+'" onclick="askRemoveFromMenu(this); event.stopPropagation();">Remove</button></div></div>' : '';
     acts='<div class="card-actions">'+
       '<button class="btn btn-sm" onclick="openFocusView(\''+a+'\',\''+n+'\')">Details</button>'+
       '<button class="btn btn-sm" onclick="openGitModal(\''+a+'\',\''+n+'\')">Git</button>'+
       '<button class="btn btn-sm" onclick="askConfirmAction(\'pull\',\''+a+'\',\''+n+'\')">Pull</button>'+
       '<button class="btn btn-sm" onclick="askConfirmAction(\'fetch\',\''+a+'\',\''+n+'\')">Fetch</button>'+
       '<button class="btn btn-sm" onclick="askTransfer(\''+a+'\',\''+n+'\',\''+u+'\')">Transfer</button>'+
+      (r.localPath ? '<button class="btn btn-sm" data-path="'+escAttr(r.localPath)+'" onclick="openFolder(this); event.stopPropagation();">Open</button>' : '')+
     '</div>';
   } else {
     acts='<div class="card-actions">'+
@@ -4527,9 +4547,33 @@ document.getElementById('cloneUrlFolderName').addEventListener('keydown', functi
   if (e.key === 'Escape') { e.preventDefault(); closeOpenModals(); }
 });
 
+// --- Workspace Indicator (header) ---
+async function updateWorkspaceIndicator() {
+  try {
+    var ws = await apiGet('/workspace/status');
+    var el = document.getElementById('wsIndicator');
+    var nameEl = document.getElementById('wsIndicatorName');
+    var pathEl = document.getElementById('wsIndicatorPath');
+    if (ws.active) {
+      nameEl.textContent = ws.active.name;
+      pathEl.textContent = ws.active.path;
+      el.style.display = '';
+    } else if (ws.path) {
+      nameEl.textContent = 'Workspace';
+      pathEl.textContent = ws.path;
+      el.style.display = '';
+    } else {
+      el.style.display = 'none';
+    }
+  } catch (e) {
+    document.getElementById('wsIndicator').style.display = 'none';
+  }
+}
+
 // --- Init ---
 connectSSE();
 refreshRepos();
+updateWorkspaceIndicator();
 </script>
 </body>
 </html>
