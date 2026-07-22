@@ -376,6 +376,15 @@ app.delete("/api/workspaces/:name", (req, res) => {
   }
 });
 
+// Global error handler — ensure all errors return JSON (prevents HTML stack traces)
+app.use((err, req, res, next) => {
+  try {
+    console.error('[server] Unhandled error:', err && err.stack ? err.stack : err);
+  } catch (e) { /* ignore logging errors */ }
+  if (res.headersSent) return next(err);
+  res.status(err && err.status ? err.status : 500).json({ success: false, error: err && err.message ? String(err.message) : 'Internal Server Error' });
+});
+
 app.post("/api/workspace/setup", (req, res) => {
   const workspace = require("./workspace");
   const err = validateDirPath(req.body.path);
