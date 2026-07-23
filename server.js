@@ -1554,6 +1554,8 @@ app.get("/api/accounts/:name/status", async (req, res) => {
       // gh supports multiple logged-in accounts; only one is active at a time.
       const gh = runCommand("gh auth status --json hosts", BASE_DIR, 7000);
       if (gh.success && gh.output) {
+        // Debug: log a short snippet of raw gh output to help diagnose parsing mismatches
+        try { console.log('[gh] raw auth status snippet for', name, String(gh.output).slice(0, 400).replace(/\s+/g,' ')); } catch (e) {}
         let parsed = null;
         try {
           parsed = JSON.parse(gh.output);
