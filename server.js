@@ -1103,6 +1103,25 @@ function switchGHAccount(githubUser) {
   const safe = String(githubUser).replace(/[^a-zA-Z0-9\-_]/g, "");
   // SECURITY: Use execFileSync with array args to avoid shell injection
   try {
+    // Check if gh knows about this login first to avoid noisy failures
+    try {
+      const status = runCommand("gh auth status --json hosts", BASE_DIR, 7000);
+      if (status.success && status.output) {
+        const parsed = JSON.parse(status.output);
+        const hostEntries = parsed && parsed.hosts && parsed.hosts["github.com"];
+        if (Array.isArray(hostEntries)) {
+          const match = hostEntries.find((e) => e && e.login === safe);
+          if (!match) {
+            // Requested login not present in gh config
+            return false;
+          }
+          if (match.active === true) return true; // already active
+        }
+      }
+    } catch (e) {
+      // ignore and fallthrough to attempt switch
+    }
+
     execFileSync("gh", ["auth", "switch", "--user", safe], {
       encoding: "utf8",
       timeout: 15000,
