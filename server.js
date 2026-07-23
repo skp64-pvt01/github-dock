@@ -1554,7 +1554,19 @@ app.get("/api/accounts/:name/status", async (req, res) => {
       // gh supports multiple logged-in accounts; only one is active at a time.
       const gh = runCommand("gh auth status --json hosts", BASE_DIR, 7000);
       if (gh.success && gh.output) {
-        const parsed = JSON.parse(gh.output);
+        let parsed = null;
+        try {
+          parsed = JSON.parse(gh.output);
+        } catch (e) {
+          console.warn('[gh] Could not parse gh auth status JSON for account', name, e.message);
+        }
+        // Debug: log gh auth status summary when parsing for troubleshooting
+        try {
+          if (parsed && parsed.hosts) {
+            const keys = Object.keys(parsed.hosts || {}).map(k => ({ host: k, count: (parsed.hosts[k]||[]).length }));
+            console.log('[gh] auth hosts summary for', name, JSON.stringify(keys));
+          }
+        } catch (e) {}
         const hostEntries = parsed && parsed.hosts && parsed.hosts["github.com"];
         if (Array.isArray(hostEntries)) {
           const match = hostEntries.find((e) => e && e.login === account.githubUser);
