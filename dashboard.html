@@ -3191,7 +3191,8 @@ function openTokenModal(accountName) {
     // Also check gh CLI state and show disconnect affordance when gh is active
     apiGet('/accounts/' + encodeURIComponent(accountName) + '/status').then(function(st) {
       if (document.getElementById('tokenModalAccount').value !== accountName) return;
-      var ghActive = !!(st && st.ghAuthenticated);
+      // ponytail: accept both legacy ghAuthenticated and newer ghActive fields
+      var ghActive = !!(st && (st.ghAuthenticated || st.ghActive));
       if (disconnectBtn) disconnectBtn.style.display = (tokenConnected || ghActive) ? 'inline-flex' : 'none';
     }).catch(function(){});
   }).catch(function(){});
