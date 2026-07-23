@@ -771,7 +771,8 @@ function runCommand(cmd, cwd = BASE_DIR, timeoutMs = 60000) {
       timeout: timeoutMs,
       stdio: ["pipe", "pipe", "pipe"],
     });
-    return { success: true, output: result.trim() };
+    // ponytail: use trimEnd() instead of trim() to preserve crucial leading spaces of first line (e.g. git status --porcelain)
+    return { success: true, output: result.trimEnd() };
   } catch (err) {
     return {
       success: false,
@@ -791,7 +792,8 @@ function runGit(args, cwd = BASE_DIR, timeoutMs = 60000) {
       timeout: timeoutMs,
       stdio: ["pipe", "pipe", "pipe"],
     });
-    return { success: true, output: result.trim() };
+    // ponytail: use trimEnd() instead of trim() to preserve crucial leading spaces
+    return { success: true, output: result.trimEnd() };
   } catch (err) {
     return {
       success: false,
