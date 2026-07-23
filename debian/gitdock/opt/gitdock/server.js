@@ -435,7 +435,7 @@ app.post("/api/workspaces", (req, res) => {
   }
 });
 
-app.put("/api/workspaces/activate", (req, res) => {
+const activateWorkspaceHandler = (req, res) => {
   const workspace = require("./workspace");
   const { name } = req.body;
   if (!name) return res.status(400).json({ success: false, error: "Workspace name required" });
@@ -448,7 +448,9 @@ app.put("/api/workspaces/activate", (req, res) => {
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
-});
+};
+app.put("/api/workspaces/activate", activateWorkspaceHandler);
+app.post("/api/workspaces/activate", activateWorkspaceHandler);
 
 app.delete("/api/workspaces/:name", (req, res) => {
   const workspace = require("./workspace");
@@ -769,7 +771,8 @@ function runCommand(cmd, cwd = BASE_DIR, timeoutMs = 60000) {
       timeout: timeoutMs,
       stdio: ["pipe", "pipe", "pipe"],
     });
-    return { success: true, output: result.trim() };
+    // ponytail: use trimEnd() instead of trim() to preserve crucial leading spaces of first line (e.g. git status --porcelain)
+    return { success: true, output: result.trimEnd() };
   } catch (err) {
     return {
       success: false,
@@ -789,7 +792,8 @@ function runGit(args, cwd = BASE_DIR, timeoutMs = 60000) {
       timeout: timeoutMs,
       stdio: ["pipe", "pipe", "pipe"],
     });
-    return { success: true, output: result.trim() };
+    // ponytail: use trimEnd() instead of trim() to preserve crucial leading spaces
+    return { success: true, output: result.trimEnd() };
   } catch (err) {
     return {
       success: false,
@@ -1099,27 +1103,89 @@ async function validateAccountToken(accountName, account, token) {
   return res;
 }
 
+function getGhAccounts() {
+  const result = {}; // lowercase_login -> { login, authenticated, active }
+
+  // Try JSON first
+  const ghJson = runCommand("gh auth status --json hosts", BASE_DIR, 7000);
+  if (ghJson.success && ghJson.output) {
+    try {
+      const parsed = JSON.parse(ghJson.output);
+      const hostEntries = parsed && parsed.hosts && parsed.hosts["github.com"];
+      if (Array.isArray(hostEntries)) {
+        for (const e of hostEntries) {
+          if (e && e.login) {
+            const login = String(e.login);
+            result[login.toLowerCase()] = {
+              login,
+              authenticated: e.state === "success",
+              active: e.active === true,
+            };
+          }
+        }
+        return result;
+      }
+    } catch (e) { /* ignore JSON parse error */ }
+  }
+
+  // Fallback to plain text (older gh versions like Ubuntu ESM)
+  const ghText = runCommand("gh auth status", BASE_DIR, 7000);
+  if (ghText.success && ghText.output) {
+    const lines = ghText.output.split(/\r?\n/);
+    let currentLogin = null;
+    let isAuthenticated = false;
+    let isActive = false;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      const loginMatch = trimmed.match(/(?:Logged in to|Failed to log in to)\s+\S+\s+account\s+([\w.-]+)/i);
+      if (loginMatch) {
+        if (currentLogin) {
+          result[currentLogin.toLowerCase()] = {
+            login: currentLogin,
+            authenticated: isAuthenticated,
+            active: isActive,
+          };
+        }
+        currentLogin = loginMatch[1];
+        isAuthenticated = trimmed.indexOf("Logged in to") !== -1;
+        isActive = false;
+        continue;
+      }
+
+      if (currentLogin) {
+        if (trimmed.match(/Active account:\s*true/i)) {
+          isActive = true;
+        }
+      }
+    }
+
+    if (currentLogin) {
+      result[currentLogin.toLowerCase()] = {
+        login: currentLogin,
+        authenticated: isAuthenticated,
+        active: isActive,
+      };
+    }
+  }
+
+  return result;
+}
+
 function switchGHAccount(githubUser) {
   const safe = String(githubUser).replace(/[^a-zA-Z0-9\-_]/g, "");
   // SECURITY: Use execFileSync with array args to avoid shell injection
   try {
-    // Check if gh knows about this login first to avoid noisy failures
-    try {
-      const status = runCommand("gh auth status --json hosts", BASE_DIR, 7000);
-      if (status.success && status.output) {
-        const parsed = JSON.parse(status.output);
-        const hostEntries = parsed && parsed.hosts && parsed.hosts["github.com"];
-        if (Array.isArray(hostEntries)) {
-          const match = hostEntries.find((e) => e && e.login === safe);
-          if (!match) {
-            // Requested login not present in gh config
-            return false;
-          }
-          if (match.active === true) return true; // already active
-        }
-      }
-    } catch (e) {
-      // ignore and fallthrough to attempt switch
+    const ghAccs = getGhAccounts();
+    const match = ghAccs[safe.toLowerCase()];
+    if (!match || !match.authenticated) {
+      // Requested login not present in gh config - skip switch to avoid noisy failures
+      return false;
+    }
+    if (match.active) {
+      return true; // already active
     }
 
     execFileSync("gh", ["auth", "switch", "--user", safe], {
@@ -1550,29 +1616,11 @@ app.get("/api/accounts/:name/status", async (req, res) => {
     let ghAuthenticated = false;
     let ghActive = false;
     try {
-      // Use JSON output to avoid format/regEx drift across gh versions.
-      // gh supports multiple logged-in accounts; only one is active at a time.
-      const gh = runCommand("gh auth status --json hosts", BASE_DIR, 7000);
-      if (gh.success && gh.output) {
-        let parsed = null;
-        try {
-          parsed = JSON.parse(gh.output);
-        } catch (e) {
-          console.warn('[gh] Could not parse gh auth status JSON for account', name, e.message);
-        }
-        // Debug: log gh auth status summary when parsing for troubleshooting
-        try {
-          if (parsed && parsed.hosts) {
-            const keys = Object.keys(parsed.hosts || {}).map(k => ({ host: k, count: (parsed.hosts[k]||[]).length }));
-            console.log('[gh] auth hosts summary for', name, JSON.stringify(keys));
-          }
-        } catch (e) {}
-        const hostEntries = parsed && parsed.hosts && parsed.hosts["github.com"];
-        if (Array.isArray(hostEntries)) {
-          const match = hostEntries.find((e) => e && e.login === account.githubUser);
-          ghAuthenticated = !!(match && match.state === "success");
-          ghActive = !!(match && match.active === true);
-        }
+      const ghAccs = getGhAccounts();
+      const match = ghAccs[String(account.githubUser || "").toLowerCase()];
+      if (match) {
+        ghAuthenticated = !!match.authenticated;
+        ghActive = !!match.active;
       }
     } catch (e) { /* ignore */ }
 
@@ -1990,14 +2038,10 @@ app.get("/api/repos", async (req, res) => {
     // This is the only reliable way to know if private repos can be listed for a given user.
     const ghAuthedLogins = new Set();
     try {
-      const gh = runCommand("gh auth status --json hosts", BASE_DIR, 7000);
-      if (gh.success && gh.output) {
-        const parsed = JSON.parse(gh.output);
-        const hostEntries = parsed && parsed.hosts && parsed.hosts["github.com"];
-        if (Array.isArray(hostEntries)) {
-          for (const e of hostEntries) {
-            if (e && e.state === "success" && e.login) ghAuthedLogins.add(String(e.login));
-          }
+      const ghAccs = getGhAccounts();
+      for (const val of Object.values(ghAccs)) {
+        if (val.authenticated && val.login) {
+          ghAuthedLogins.add(String(val.login));
         }
       }
     } catch (e) {

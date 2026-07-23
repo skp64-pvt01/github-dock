@@ -5,7 +5,7 @@ afc762ddcdc0bb671931ac5368e919f5  opt/gitdock/AGENTS.md
 99daafeeb2d462b41d0aa391a9226c28  opt/gitdock/CONTRIBUTING.md
 dc6bc8be648b2d81eb95d3f6ac8cdff1  opt/gitdock/PLAN.md
 bb8119fb46f1347301bb4029a0adfc6d  opt/gitdock/README.md
-3797f7b03d16b6f73f5e36c70500227a  opt/gitdock/dashboard.html
+1cd3bdf19b41b628e3a07990639d3667  opt/gitdock/dashboard.html
 228089cab73dddc43fa10bf48692b5bb  opt/gitdock/hub/.env.example
 7497c2c94754107a71e362f0db8e3ed0  opt/gitdock/hub/.gitignore
 b8f4d14f7bb977c843a0bd1d96917a49  opt/gitdock/hub/Dockerfile
@@ -22,9 +22,9 @@ ebbd98c154d1654e717af9112932d2a9  opt/gitdock/hub/db.js
 4e9e5f45cdeaf2a32e22ef46e2881e3e  opt/gitdock/lib/github-api.js
 d5db347fcafe89fdfceabbe37261b915  opt/gitdock/lib/gitlab-api.js
 3005b5222e41f472a833494c2768fc64  opt/gitdock/lib/provider-routing.js
-0aae38a57517179ca45c2679f5fcef03  opt/gitdock/lib/scan-repos.js
+243e60f2af3d108cefdf9c64989a4eb2  opt/gitdock/lib/scan-repos.js
 9fea97e29715b1e3950e2ffe8e171c7d  opt/gitdock/lib/security.js
-d551db23dbf7981ae85bbc8d76186a2f  opt/gitdock/package.json
+e64349b279ffd578ab3c220cf8228170  opt/gitdock/package.json
 804a1fcd8cfe6aca03c91c39e1debe7c  opt/gitdock/scripts/README.md
 aa2d4ab4c26aec0e81e86b6ff023a6e3  opt/gitdock/scripts/build-sea.ps1
 4f2dbce710a9cbee7f109165eb2fc364  opt/gitdock/scripts/build-sea.sh
@@ -38,7 +38,7 @@ a4bc51158c19d142eefc5c63b13cff08  opt/gitdock/scripts/publish-v1.2.0.ps1
 052e9b96010b946b078551003285805c  opt/gitdock/scripts/release-v1.2.0-notes.md
 34fbf46fd49b21463915e033a612195e  opt/gitdock/scripts/release-v1.2.0-pr-body.md
 97fb9dbcf9f02bdbce79226dc1935957  opt/gitdock/sea-config.json
-f81ed5fd3fdba5ec21fcc26358d48755  opt/gitdock/server.js
+0ea68d4b00baa73128327783329fe2be  opt/gitdock/server.js
 d0e7d3961aff31ea4491b8328fed0b5f  opt/gitdock/site/css/common.css
 13ae0df477731a2e2a028e62c3cf4ba5  opt/gitdock/site/css/index.css
 e88e8fc3227d177b8c517ccce89647da  opt/gitdock/site/dashboard.png
