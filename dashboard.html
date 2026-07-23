@@ -2217,9 +2217,8 @@ function switchWorkspace() {
   if (!name) return;
   apiPost('/workspaces/activate', { name: name }).then(function(r) {
     if (r.success) {
-      loadSettingsData();
-      if (window.loadAccounts) loadAccounts();
-      if (window.loadLocalRepos) loadLocalRepos();
+      // ponytail: reload the full page to completely re-initialize the new workspace's configuration and repositories cleanly
+      window.location.reload();
     } else {
       alert('Failed to switch: ' + (r.error || 'unknown error'));
     }
