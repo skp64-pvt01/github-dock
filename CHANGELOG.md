@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-23
+
 ### Added
 
 - **Multi-workspace management** — `workspace.js` rewritten from single-path to multi-workspace storage (`listWorkspaces`, `getActiveWorkspace`, `activateWorkspace`, `addWorkspace`, `removeWorkspace`, `probePath`). Storage in `~/.gitdock/workspace.json` (overridable via `GITDOCK_DIR` env var).
@@ -73,5 +75,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Activity Log removed; feedback via toasts and SSE.
 - README, privacy page, and site copy aligned with real token and dormant behavior.
 
-[Unreleased]: https://github.com/gitdock-dev/gitdock/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/gitdock-dev/gitdock/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/gitdock-dev/gitdock/releases/tag/v1.3.0
 [1.2.0]: https://github.com/gitdock-dev/gitdock/releases/tag/v1.2.0

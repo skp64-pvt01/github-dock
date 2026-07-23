@@ -1,3 +1,13 @@
+gitdock (1.3.0-1) unstable; urgency=medium
+
+  * Robust parsing of gh auth status with fallback for older gh CLI versions.
+  * Fix scan-repos path duplication and double listing bug.
+  * Support POST and PUT on workspace activation to prevent HTML fallback 404.
+  * Reload page on successful workspace switch.
+  * Use trimEnd instead of trim to preserve first-line leading spaces in git porcelain status.
+
+ -- GitDock Dev <dev@gitdock.dev>  Thu, 23 Jul 2026 12:00:00 +0000
+
 gitdock (1.2.0-1) unstable; urgency=medium
 
   * Initial Debian package.
