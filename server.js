@@ -435,7 +435,7 @@ app.post("/api/workspaces", (req, res) => {
   }
 });
 
-app.put("/api/workspaces/activate", (req, res) => {
+const activateWorkspaceHandler = (req, res) => {
   const workspace = require("./workspace");
   const { name } = req.body;
   if (!name) return res.status(400).json({ success: false, error: "Workspace name required" });
@@ -448,7 +448,9 @@ app.put("/api/workspaces/activate", (req, res) => {
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
-});
+};
+app.put("/api/workspaces/activate", activateWorkspaceHandler);
+app.post("/api/workspaces/activate", activateWorkspaceHandler);
 
 app.delete("/api/workspaces/:name", (req, res) => {
   const workspace = require("./workspace");
